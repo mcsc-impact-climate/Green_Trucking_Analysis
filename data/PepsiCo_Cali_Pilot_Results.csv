@@ -1,0 +1,20 @@
+,Pepsi 1,Pepsi 2,Pepsi 3,Average
+Charging Power (central) [kW],358,270,285,304
+Charging Power (up) [kW],598,394,395,342
+Charging Power (down) [kW],150,70,102,266
+Battery Capacity (central) [kWh],822,825,827,823
+Battery Capacity (up) [kWh],825,832,833,825
+Battery Capacity (down) [kWh],819,818,821,821
+Range (central) [miles],437,449,472,454
+Range (up) [miles],529,504,504,469
+Range (down) [miles],345,394,440,439
+Electricity per mile (central) [kWh/mile],1.9,1.8,1.8,1.83
+Electricity per mile (up) [kWh/mile],2.3,2,1.9,1.88
+Electricity per mile (down) [kWh/mile],1.5,1.6,1.7,1.78
+Charging Time (central) [minutes],56,90,86,77
+Charging Time (up) [minutes],98,151,139,92
+Charging Time (down) [minutes],14,29,33,62
+Depth of Discharge (central) [%],38,45,48,44
+Depth of Discharge (up) [%],67,76,78,48
+Depth of Discharge (down) [%],9,14,18,40
+VMT (central) [miles/year],,,,
