@@ -45,6 +45,9 @@ costing_data_df['Energy charge [pessimistic]'] = ''
 costing_data_df['Demand charge [baseline]'] = ''
 costing_data_df['Demand charge [optimistic]'] = ''
 costing_data_df['Demand charge [pessimistic]'] = ''
+costing_data_df['Total [baseline]'] = ''
+costing_data_df['Total [optimistic]'] = ''
+costing_data_df['Total [pessimistic]'] = ''
 
 for index, row in costing_data_df.iterrows():
     electricity_prices_optimistic = electric_price_calculator(row['Energy per Month (MWh) [optimistic]'],
@@ -73,6 +76,9 @@ for index, row in costing_data_df.iterrows():
     costing_data_df.at[index, 'Demand charge [baseline]'] = electricity_prices_baseline[3]
     costing_data_df.at[index, 'Demand charge [optimistic]'] = electricity_prices_optimistic[3]
     costing_data_df.at[index, 'Demand charge [pessimistic]'] = electricity_prices_pessimistic[3]
+    costing_data_df.at[index, 'Total [baseline]'] = electricity_prices_baseline[0] + electricity_prices_baseline[1] + electricity_prices_baseline[2] + electricity_prices_baseline[3]
+    costing_data_df.at[index, 'Total [optimistic]'] = electricity_prices_optimistic[0] + electricity_prices_optimistic[1] + electricity_prices_optimistic[2] + electricity_prices_optimistic[3]
+    costing_data_df.at[index, 'Total [pessimistic]'] = electricity_prices_pessimistic[0] + electricity_prices_pessimistic[1] + electricity_prices_pessimistic[2] + electricity_prices_pessimistic[3]
 
 def plot_electricity_data(title, name_save, costing_data_df, costing_data_df_up=None, costing_data_df_down=None):
     x = ['Optimistic', 'Baseline', 'Pessimistic']

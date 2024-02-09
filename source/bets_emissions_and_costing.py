@@ -37,6 +37,16 @@ plt.rcParams.update(new_rc_params)
 from scipy.optimize import curve_fit
 from operator import add
 
+KG_PER_TON = 1000
+KG_PER_LB = 0.453592
+
+
+
+inputs_df = pd.read_csv('data/emission_costing_inputs.csv')
+
+dict_nominal = {}
+dict_Tesla = {}
+
 #Drive cycle. Source: Jones, R et al. (2023).Developing and Benchmarking a US Long-haul Drive Cycle forVehicle Simulations, Costing and Emissions Analysis
 #https://docs.google.com/spreadsheets/d/1Q2uO-JHfwvGxir_PU8IO5zmo0vs4ooC_/edit?usp=sharing&ouid=102742490305620802920&rtpof=true&sd=true
 
@@ -45,9 +55,9 @@ from operator import add
 
 #Parameters for vehicle simulation
 # DMM: .453592: kb to kg conversion
-m_ave_payload=41473*0.453592 #average payload +trailer mass in kg (41473 lbs, same as average payload from VIUS 2002)
+m_ave_payload=41473*KG_PER_LB #average payload +trailer mass in kg (41473 lbs, same as average payload from VIUS 2002)
 m_max = 36287.39 #maximum gross vehicle weight (GVW) of 80k pounds (36287.39 kg)
-m_truck_no_bat=(19500-3500-500-550+880)*0.453592 #weight of truck tractor without battery, payload and trailer in kg
+m_truck_no_bat=(19500-3500-500-550+880)*KG_PER_LB #weight of truck tractor without battery, payload and trailer in kg
                                                           #3500 lbs is engine weight (https://pubs.acs.org/doi/suppl/10.1021/acs.est.1c01273/suppl_file/es1c01273_si_001.pdf)
                                                           #https://www.energy.gov/eere/vehicles/fact-620-april-26-2010-class-8-truck-tractor-weight-component
                                                           #500 lbs is fuel system (https://pubs.acs.org/doi/suppl/10.1021/acs.est.1c01273/suppl_file/es1c01273_si_001.pdf)
@@ -77,7 +87,15 @@ eta_rb=0.80 #efficiency in regenerative braking (0.8), which includes efficienci
 eta_grid_transmission=0.95
 
 # DMM: Can get short-haul VMT from the same paper
-VMT=np.array([108000,120000,114000,105000,92000,81000,74000,67000,59000,52000]) #Vehicle miles traveled per year. Source: Burnham, A et al. (2021)
+VMT_nominal=np.array([108000,120000,114000,105000,92000,81000,74000,67000,59000,52000]) #Vehicle miles traveled per year. Source: Burnham, A et al. (2021)
+dict_nominal['VMT'] = VMT_nominal
+VMT_norm_dist = VMT_nominal / VMT_nominal[0]
+
+# DMM: Assume the PepsiCo VMT distribution is the same as nominal, and scales according to the miles traveled in the first year
+dict_Tesla['VMT'] = VMT_norm_dist * float(inputs_df[inputs_df['Value'] == 'Year 1 VMT (central) [miles/year]']['PepsiCo'])
+dict_Tesla['VMT_up'] = VMT_norm_dist * float(inputs_df[inputs_df['Value'] == 'Year 1 VMT (up) [miles/year]']['PepsiCo'])
+dict_Tesla['VMT_down'] = VMT_norm_dist * float(inputs_df[inputs_df['Value'] == 'Year 1 VMT (down) [miles/year]']['PepsiCo'])
+
 discountrate=0.07 #discount rate
 
 
@@ -110,10 +128,7 @@ class share_parameters:
     self.VMT = VMT
     self.discountrate=discountrate
 
-"""**1. Vehicle model for energy consumption**
-
-**[Upload files:] Drive cycle for US long haul trucks**
-"""
+# **1. Vehicle model for energy consumption**
 
 #extract vehicle speed, and road grade from drive cycle
 df = pd.read_excel('data/drivecycle.xlsx') #drive cycle as a dataframe
@@ -180,7 +195,7 @@ class truck_model:
 
     while epsilon > convergence: #convergence loop for battery weight
       df, e_bat, mileage = truck_model(parameters).get_power_requirement(df, m_guess, eta_battery)
-      m_bat = e_bat*1000/e_density;  #battery weight in kg
+      m_bat = e_bat*KG_PER_TON/e_density;  #battery weight in kg
       m = m_bat + self.parameters.m_ave_payload + self.parameters.m_truck_no_bat #m is the Gross Vehicle Weight (GVW) in kg
       epsilon = abs(m - m_guess)
       m_guess = m
@@ -188,19 +203,19 @@ class truck_model:
       print('Maximum total truck mass (80000 lbs) exceeded')
       m = self.parameters.m_max #GVW=80k pounds
       df, e_bat, mileage = truck_model(parameters).get_power_requirement(df, m, eta_battery)
-      m_bat = e_bat*1000/e_density;  #battery weight in kg
+      m_bat = e_bat*KG_PER_TON/e_density;  #battery weight in kg
 
 
     return m_bat, e_bat, mileage, m
 
-"""**2. Payload penalty analysis**
+# **2. Payload penalty analysis**
 
-**[Upload files:] Payload distribution of long-haul trucks in the US**
-"""
+# **[Upload files:] Payload distribution of long-haul trucks in the US**
+
 
 #extract payload distribution from excel file
 payload_distribution = pd.read_excel('data/payloaddistribution.xlsx')
-payload_distribution['Payload (kg)'] = payload_distribution['Payload (lb)']*0.453592 #payload distribution in kgs
+payload_distribution['Payload (kg)'] = payload_distribution['Payload (lb)']*KG_PER_LB #payload distribution in kgs
 payload_distribution.head()
 
 ####****Input parameters for payload penalty analysis****####
@@ -217,7 +232,8 @@ class payload:
     payload_penalty = 1 + (alpha*payload_distribution['Payload loss (kg)'].mean())/payload_max
     return payload_penalty
 
-parameters = share_parameters(m_ave_payload, m_max, m_truck_no_bat, m_guess, p_aux, p_motor_max, cd, cr, a_cabin, g, rho_air, DoD, eta_i, eta_m, eta_gs, eta_rb, eta_grid_transmission, VMT, discountrate)
+parameters = share_parameters(m_ave_payload, m_max, m_truck_no_bat, m_guess, p_aux, p_motor_max, cd, cr, a_cabin, g, rho_air, DoD, eta_i, eta_m, eta_gs, eta_rb, eta_grid_transmission, VMT_nominal, discountrate)
+parameters_Tesla = share_parameters(m_ave_payload, m_max, m_truck_no_bat, m_guess, p_aux, p_motor_max, cd, cr, a_cabin, g, rho_air, DoD, eta_i, eta_m, eta_gs, eta_rb, eta_grid_transmission, dict_Tesla['VMT'], discountrate)
 
 #Define variables for case analysis:
 
@@ -230,14 +246,11 @@ alpha=1; #for payload penalty factor calculations (alpha = 1 for base case, alph
 vehicle_model_results_LFP = pd.DataFrame(columns = ['Energy battery (kWh)', 'Battery mass (lbs)', 'Fuel economy (kWh/mi)', 'Payload penalty factor', 'Total vehicle mass (lbs)'])
 
 for e_density in e_density_list_LFP:
-  m_bat, e_bat, mileage, m= truck_model(parameters).get_battery_size(df, eta_battery_LFP, e_density)
-  print(e_bat)
-  print(mileage)
-  print(m_bat)
+  m_bat, e_bat, mileage, m = truck_model(parameters).get_battery_size(df, eta_battery_LFP, e_density)
   payload_penalty_factor=payload(parameters).get_penalty(payload_distribution, m_bat, alpha)
-  vehicle_model_results_LFP.loc[len(vehicle_model_results_LFP)] = [e_bat, m_bat/0.453592, mileage, payload_penalty_factor, m/0.453592]
+  vehicle_model_results_LFP.loc[len(vehicle_model_results_LFP)] = [e_bat, m_bat/KG_PER_LB, mileage, payload_penalty_factor, m/KG_PER_LB]
 
-vehicle_model_results_LFP.head()
+#print(vehicle_model_results_LFP.head())
 
 #Define variables for case analysis:
 
@@ -250,13 +263,45 @@ alpha=1; #for payload penalty factor calculations (alpha = 1 for base case, alph
 vehicle_model_results_NMC = pd.DataFrame(columns = ['Energy battery (kWh)', 'Battery mass (lbs)', 'Fuel economy (kWh/mi)', 'Payload penalty factor', 'Total vehicle mass (lbs)'])
 
 for e_density in e_density_list_NMC:
-  m_bat, e_bat, mileage, m= truck_model(parameters).get_battery_size(df, eta_battery_NMC, e_density)
+  m_bat, e_bat, mileage, m = truck_model(parameters).get_battery_size(df, eta_battery_NMC, e_density)
   payload_penalty_factor=payload(parameters).get_penalty(payload_distribution, m_bat, alpha)
-  vehicle_model_results_NMC.loc[len(vehicle_model_results_NMC)] = [e_bat, m_bat/0.453592, mileage, payload_penalty_factor, m/0.453592]
+  vehicle_model_results_NMC.loc[len(vehicle_model_results_NMC)] = [e_bat, m_bat/KG_PER_LB, mileage, payload_penalty_factor, m/KG_PER_LB]
 
-vehicle_model_results_NMC.head()
+#print(vehicle_model_results_NMC.head())
 
-"""**Emissions analysis**"""
+#######################################################################################################
+
+columns = ['Energy battery (kWh)', 'Battery mass (lbs)', 'Fuel economy (kWh/mi)', 'Payload penalty factor', 'Total vehicle mass (lbs)']
+vehicle_model_results_Tesla_LFP = pd.DataFrame({col: [None, None, None] for col in columns})
+vehicle_model_results_Tesla_NMC = pd.DataFrame({col: [None, None, None] for col in columns})
+
+for i in range(3):
+    vehicle_model_results_Tesla_LFP.loc[i]['Energy battery (kWh)'] = float(inputs_df[inputs_df['Value'] == 'Battery Capacity (central) [kWh]']['PepsiCo'])
+#    vehicle_model_results_Tesla_LFP.loc[i]['Energy battery up (kWh)'] = inputs_df['Battery Capacity (up) [kWh]']
+#    vehicle_model_results_Tesla_LFP.loc[i]['Energy battery down (kWh)'] = inputs_df['Battery Capacity (down) [kWh]']
+    vehicle_model_results_Tesla_NMC.loc[i]['Energy battery (kWh)'] = float(inputs_df[inputs_df['Value'] == 'Battery Capacity (central) [kWh]']['PepsiCo'])
+    
+    vehicle_model_results_Tesla_LFP.loc[i]['Fuel economy (kWh/mi)'] = float(inputs_df[inputs_df['Value'] == 'Electricity per mile (up) [kWh/mile]']['PepsiCo'])
+    vehicle_model_results_Tesla_NMC.loc[i]['Fuel economy (kWh/mi)'] = float(inputs_df[inputs_df['Value'] == 'Electricity per mile (up) [kWh/mile]']['PepsiCo'])
+    
+    m_bat_LFP = float(inputs_df[inputs_df['Value'] == 'Battery Capacity (central) [kWh]']['PepsiCo']) / (e_density_list_LFP[i] / KG_PER_TON)
+    m_bat_NMC = float(inputs_df[inputs_df['Value'] == 'Battery Capacity (central) [kWh]']['PepsiCo']) / (e_density_list_NMC[i] / KG_PER_TON)
+
+    vehicle_model_results_Tesla_LFP.loc[i]['Battery mass (lbs)'] = m_bat_LFP / KG_PER_LB
+    vehicle_model_results_Tesla_NMC.loc[i]['Battery mass (lbs)'] = m_bat_NMC / KG_PER_LB
+    
+    payload_penalty_factor_LFP = payload(parameters_Tesla).get_penalty(payload_distribution, m_bat_LFP, alpha)
+    payload_penalty_factor_NMC = payload(parameters_Tesla).get_penalty(payload_distribution, m_bat_NMC, alpha)
+    
+    vehicle_model_results_Tesla_LFP.loc[i]['Payload penalty factor'] = payload_penalty_factor_LFP
+    vehicle_model_results_Tesla_NMC.loc[i]['Payload penalty factor'] = payload_penalty_factor_NMC
+    
+    vehicle_model_results_Tesla_LFP.loc[i]['Total vehicle mass (lbs)'] = (m_bat_LFP + parameters_Tesla.m_ave_payload + parameters_Tesla.m_truck_no_bat) / KG_PER_LB
+    vehicle_model_results_Tesla_NMC.loc[i]['Total vehicle mass (lbs)'] = (m_bat_NMC + parameters_Tesla.m_ave_payload + parameters_Tesla.m_truck_no_bat) / KG_PER_LB
+    
+#print(vehicle_model_results_Tesla_LFP.head())
+
+# **Emissions analysis**
 
 ##Evolution of carbon intensities for US electric grid.
 ##Carbon intensities from EIA for every five years and fitted to a exponential decay curve
@@ -308,7 +353,7 @@ class emission:
   def get_WTW(self, vehicle_model_results, GHG_bat_unit, replacements):
     GHG_emissions = pd.DataFrame(columns = ['GHGs manufacturing (gCO2/mi)', 'GHGs grid (gCO2/mi)', 'GHGs total (gCO2/mi)'])
     GHG_emissions['GHGs manufacturing (gCO2/mi)'] = (vehicle_model_results['Payload penalty factor']*(1+ replacements)*vehicle_model_results['Energy battery (kWh)']*GHG_bat_unit)/self.parameters.VMT.sum()
-
+    
     CI_grid_miles = pd.DataFrame({'CI_grid_miles':[sum(xi * yi for xi, yi in zip(self.parameters.VMT, y)) for y in [CI_grid_cal(range(2020,2030)), CI_grid_cal(range(2030,2040)), CI_grid_cal(range(2050,2060))]]})
     GHG_emissions['GHGs grid (gCO2/mi)']=vehicle_model_results['Payload penalty factor']*vehicle_model_results['Fuel economy (kWh/mi)']*CI_grid_miles['CI_grid_miles']/(self.parameters.eta_grid_transmission*self.parameters.VMT.sum())
     GHG_emissions['GHGs total (gCO2/mi)'] =  GHG_emissions['GHGs manufacturing (gCO2/mi)'] + GHG_emissions['GHGs grid (gCO2/mi)'] # WTW emissions
@@ -320,8 +365,14 @@ GHG_bat_unit_LFP=69*1000 #g CO2/kWh
 replacements_LFP=0
 
 #######################################################################################################
-GHG_emissions_LFP= emission(parameters).get_WTW(vehicle_model_results_LFP, GHG_bat_unit_LFP,  replacements_LFP)
-GHG_emissions_LFP.head()
+GHG_emissions_LFP = emission(parameters).get_WTW(vehicle_model_results_LFP, GHG_bat_unit_LFP,  replacements_LFP)
+GHG_emissions_Tesla_LFP = emission(parameters_Tesla).get_WTW(vehicle_model_results_Tesla_LFP, GHG_bat_unit_LFP,  replacements_LFP)
+
+print(GHG_emissions_LFP)
+print(GHG_emissions_Tesla_LFP)
+GHG_emissions_LFP.to_csv('tables/GHG_emissions_LFP.csv')
+GHG_emissions_Tesla_LFP.to_csv('tables/GHG_emissions_Tesla_LFP.csv')
+
 
 #Define variables for case analysis:
 
@@ -331,9 +382,21 @@ replacements_NMC=1
 #######################################################################################################
 
 GHG_emissions_NMC= emission(parameters).get_WTW(vehicle_model_results_NMC, GHG_bat_unit_NMC,  replacements_NMC)
-GHG_emissions_NMC.head()
+GHG_emissions_Tesla_NMC = emission(parameters_Tesla).get_WTW(vehicle_model_results_Tesla_NMC, GHG_bat_unit_NMC,  replacements_NMC)
 
+print(GHG_emissions_NMC)
+print(GHG_emissions_Tesla_NMC)
+GHG_emissions_NMC.to_csv('tables/GHG_emissions_NMC.csv')
+GHG_emissions_Tesla_NMC.to_csv('tables/GHG_emissions_Tesla_NMC.csv')
+"""
+
+"""
 ############# Plot results ##########################
+GHG_emissions_LFP = pd.read_csv('tables/GHG_emissions_LFP.csv')
+GHG_emissions_Tesla_LFP = pd.read_csv('tables/GHG_emissions_Tesla_LFP.csv')
+
+GHG_emissions_NMC = pd.read_csv('tables/GHG_emissions_NMC.csv')
+GHG_emissions_Tesla_NMC = pd.read_csv('tables/GHG_emissions_Tesla_NMC.csv')
 
 ##GHGs emissions for diesel baseline:
 GHG_emissions_diesel = pd.DataFrame({'Diesel Baseline (gCO2/mi)': [1507, 1180, 1081]}) # in gCO2/mi Source: Jones, R et al. (2023).Developing and Benchmarking a US Long-haul Drive Cycle forVehicle Simulations, Costing and Emissions Analysis.
@@ -341,39 +404,45 @@ GHG_emissions_diesel.head()
 
 
 #plots
-fig, ax = plt.subplots(figsize=(8, 5))
-bar_width = 0.2
+fig, ax = plt.subplots(figsize=(14, 5))
+bar_width = 0.15
 
 
-bar1 = np.arange(len(GHG_emissions_LFP.index))
+bar1 = np.arange(len(GHG_emissions_LFP.index))*1.2
 bar2 = [x + 1.2*bar_width for x in bar1]
 bar3 = [x + 1.2*bar_width for x in bar2]
+bar4 = [x + 1.2*bar_width for x in bar3]
+bar5 = [x + 1.2*bar_width for x in bar4]
 
 
 ax.bar(bar1,[0,0,0], width=bar_width, color='darkorange')
 ax.bar(bar2, GHG_emissions_LFP['GHGs grid (gCO2/mi)'], label='Battery manufacturing', width=bar_width, color='darkorange')
 ax.bar(bar3, GHG_emissions_NMC['GHGs grid (gCO2/mi)'], width=bar_width, color='darkorange')
+ax.bar(bar4, GHG_emissions_Tesla_LFP['GHGs grid (gCO2/mi)'], width=bar_width, color='darkorange')
+ax.bar(bar5, GHG_emissions_Tesla_NMC['GHGs grid (gCO2/mi)'], width=bar_width, color='darkorange')
 
 
 plt1=ax.bar(bar1, GHG_emissions_diesel['Diesel Baseline (gCO2/mi)'], width=bar_width, bottom=[0,0,0], color='gray')
 plt2=ax.bar(bar2, GHG_emissions_LFP['GHGs manufacturing (gCO2/mi)'], width=bar_width, label='Electricity generation',  bottom= GHG_emissions_LFP['GHGs grid (gCO2/mi)'], color='#F7D57D')
 plt3=ax.bar(bar3, GHG_emissions_NMC['GHGs manufacturing (gCO2/mi)'], width=bar_width, bottom= GHG_emissions_NMC['GHGs grid (gCO2/mi)'], color='#F7D57D')
+plt4=ax.bar(bar4, GHG_emissions_Tesla_LFP['GHGs manufacturing (gCO2/mi)'], width=bar_width, bottom= GHG_emissions_Tesla_LFP['GHGs grid (gCO2/mi)'], color='#F7D57D')
+plt5=ax.bar(bar5, GHG_emissions_Tesla_NMC['GHGs manufacturing (gCO2/mi)'], width=bar_width, bottom= GHG_emissions_Tesla_NMC['GHGs grid (gCO2/mi)'], color='#F7D57D')
 
-
-plt.text(bar1[1], 1.2*plt1[-1].get_height(), 'DIESEL', ha='center', va='top')
-plt.text(bar2[1], 0.9*plt1[-1].get_height(), 'LFP', ha='center', va='top')
-plt.text(bar3[1], plt1[-2].get_height(), 'NMC', ha='center', va='top')
-
+plt.text(bar1[1], 1.1*GHG_emissions_diesel['Diesel Baseline (gCO2/mi)'][1], 'DIESEL', ha='center', va='top')
+plt.text(bar2[1], 1.1*(GHG_emissions_LFP['GHGs grid (gCO2/mi)'] + GHG_emissions_LFP['GHGs manufacturing (gCO2/mi)'])[1], 'LFP', ha='center', va='top')
+plt.text(bar3[1], 1.1*(GHG_emissions_NMC['GHGs grid (gCO2/mi)'] + GHG_emissions_NMC['GHGs manufacturing (gCO2/mi)'])[1], 'NMC', ha='center', va='top')
+plt.text(bar4[1], 1.4*(GHG_emissions_Tesla_LFP['GHGs grid (gCO2/mi)'] + GHG_emissions_Tesla_LFP['GHGs manufacturing (gCO2/mi)'])[1], 'Tesla\nLFP', ha='center', va='top')
+plt.text(bar5[1], 1.4*(GHG_emissions_Tesla_NMC['GHGs grid (gCO2/mi)'] + GHG_emissions_Tesla_NMC['GHGs manufacturing (gCO2/mi)'])[1], 'Tesla\nNMC', ha='center', va='top')
 
 ax.set_ylabel('Well-to-Wheel Emissions (gCO2/mi)', weight='bold')
-ax.set_xticks([r + bar_width for r in range(len(GHG_emissions_LFP.index))])
+ax.set_xticks([r + bar_width*2 for r in np.arange(len(GHG_emissions_LFP.index))*1.2])
 ax.set_xticklabels(['Present', 'Mid term', 'Long term'],weight='bold')
 ax.legend(loc='upper right')
 
-
 plt.savefig('plots/wtw_emissions.png')
 
-"""**Costing analysis**"""
+
+# **Costing analysis**
 
 ####****Cost analysis****####
 #TCSs (in $ per vehicle mile travelled) are given in the corresponding present values of each scenario today, 2030 and 2050
@@ -381,11 +450,9 @@ plt.savefig('plots/wtw_emissions.png')
 #Inputs: Vehicle model results, number of replacements, capital and operating unit costs, GHG emissions, social cost of carbon and discount dactor
 #Output: TCS, total operating costs per mile, total capital costs per mile, GHGs emissions penalty per mile
 
-
 class cost:
   def __init__(self, parameters):
     self.parameters = parameters
-
 
   def get_capital(self, vehicle_model_results, replacements, capital_cost_unit,battery_unit_cost,discountfactor):
     #We consider replacement of NMC battery in the 5th year of truck's lifetime
@@ -396,7 +463,8 @@ class cost:
 
   def get_operating(self, vehicle_model_results, replacements, operating_cost_unit, electricity_unit, total_CAPEX,discountfactor):
     electricity = vehicle_model_results['Payload penalty factor']* electricity_unit*vehicle_model_results['Fuel economy (kWh/mi)']*np.sum(self.parameters.VMT* discountfactor)/self.parameters.VMT.sum()
-    labor = vehicle_model_results['Payload penalty factor']* operating_cost_unit['labor ($/mi)']*np.sum(self.parameters.VMT* discountfactor)/self.parameters.VMT.sum()
+    print(electricity)
+    labor = vehicle_model_results['Payload penalty factor'] * operating_cost_unit['labor ($/mi)']*np.sum(self.parameters.VMT* discountfactor)/self.parameters.VMT.sum()
     # DMM: Maintenance cost may be less for EV truck (opportunity to narrow this down better relative to the source)
     others_opex = vehicle_model_results['Payload penalty factor']*(operating_cost_unit['maintenance & repair ($/mi)']+ operating_cost_unit['misc ($/mi)'] + (operating_cost_unit['insurance ($/mi)']*total_CAPEX/vehicle_model_results['Payload penalty factor']))*np.sum(self.parameters.VMT* discountfactor)/self.parameters.VMT.sum()
     total_OPEX=  electricity + labor + others_opex
@@ -426,54 +494,90 @@ class cost:
 
 # DMM: Update these numbers for short-haul trucks in https://publications.anl.gov/anlpubs/2021/05/167399.pdf
 # DMM: Insurance increases with cost of vehicle
-capital_cost_unit= pd.DataFrame({'glider ($)': [95000, 95000, 95000], 'motor and inverter ($/kW)': [77, 25, 18], 'DC-DC converter ($/kW)': [90, 65, 65]})
+capital_cost_unit = pd.DataFrame({'glider ($)': [95000, 95000, 95000], 'motor and inverter ($/kW)': [77, 25, 18], 'DC-DC converter ($/kW)': [90, 65, 65]})
 operating_cost_unit = pd.DataFrame({'maintenance & repair ($/mi)': [0.14, 0.14, 0.14], 'labor ($/mi)': [0.69, 0.69, 0.69], 'insurance ($/mi)': [0.19822813, 0.19822813, 0.19822813], 'misc ($/mi)': [0.05,0.05,0.05]})
 
 ####****Input parameters for case analysis****####
-electricity_unit=[0.32, 0.32, 0.15];    # DMM: Electricity price will vary by region. The value here includes demand charges, etc. (retail price)
+electricity_unit=np.array([0.32, 0.32, 0.15]);    # DMM: Electricity price will vary by region. The value here includes demand charges, etc. (retail price)
+electricity_unit_Tesla = float(inputs_df[inputs_df['Value'] == 'Electricity rate (central) [$/kWh]']['PepsiCo']) * electricity_unit / electricity_unit[0]    # Assume the time projection of Tesla electricity price follows the same shape as nominal
+
 SCC=[51, 62, 85] #social cost of carbon in $/ton CO2. Source: https://www.whitehouse.gov/wp-content/uploads/2021/02/TechnicalSupportDocument_SocialCostofCarbonMethaneNitrousOxide.pdf
 
 battery_unit_cost_LFP=[100, 75, 70] #LFP unit cost in $/kWh
 TCS_LFP=cost(parameters).get_TCS(vehicle_model_results_LFP, capital_cost_unit, battery_unit_cost_LFP, operating_cost_unit, electricity_unit, replacements_LFP, GHG_emissions_LFP, SCC)
-TCS_LFP.head() #TCS in $/mi
+TCS_Tesla_LFP = cost(parameters_Tesla).get_TCS(vehicle_model_results_Tesla_LFP, capital_cost_unit, battery_unit_cost_LFP, operating_cost_unit, electricity_unit_Tesla, replacements_LFP, GHG_emissions_Tesla_LFP, SCC)
+
+print(TCS_LFP.head())
+print(TCS_Tesla_LFP.head())
+TCS_LFP.to_csv('tables/TCS_LFP.csv')
+TCS_Tesla_LFP.to_csv('tables/TCS_Tesla_LFP.csv')
 
 battery_unit_cost_NMC=[137, 100, 80] #NMC unit cost in $/kWh
 TCS_NMC=cost(parameters).get_TCS(vehicle_model_results_NMC, capital_cost_unit, battery_unit_cost_NMC, operating_cost_unit, electricity_unit, replacements_NMC, GHG_emissions_NMC, SCC)
-TCS_NMC.head() #TCS in $/mi
+TCS_Tesla_NMC = cost(parameters_Tesla).get_TCS(vehicle_model_results_Tesla_NMC, capital_cost_unit, battery_unit_cost_NMC, operating_cost_unit, electricity_unit_Tesla, replacements_NMC, GHG_emissions_Tesla_NMC, SCC)
+
+print(TCS_NMC.head()) #TCS in $/mi
+print(TCS_Tesla_NMC.head())
+TCS_NMC.to_csv('tables/TCS_NMC.csv')
+TCS_Tesla_NMC.to_csv('tables/TCS_Tesla_NMC.csv')
+
+
 
 #plot results
+
+TCS_LFP = pd.read_csv('tables/TCS_LFP.csv')
+TCS_Tesla_LFP = pd.read_csv('tables/TCS_Tesla_LFP.csv')
+
+TCS_NMC = pd.read_csv('tables/TCS_NMC.csv')
+TCS_Tesla_NMC = pd.read_csv('tables/TCS_Tesla_NMC.csv')
+
 fig, ax = plt.subplots(figsize=(8, 5))
 bar_width = 0.2
 
 
-bar1 = np.arange(len(TCS_NMC.index))
+bar1 = np.arange(len(TCS_NMC.index))*1.2
 bar2 = [x + 1.2*bar_width for x in bar1]
+bar3 = [x + 1.2*bar_width for x in bar2]
+bar4 = [x + 1.2*bar_width for x in bar3]
 
 
 ax.bar(bar1, TCS_LFP['Total electricity ($/mi)'], label='Electricity', width=bar_width, color='#AA6127')
 ax.bar(bar2, TCS_NMC['Total electricity ($/mi)'], width=bar_width, color='#AA6127')
+ax.bar(bar3, TCS_Tesla_LFP['Total electricity ($/mi)'], width=bar_width, color='#AA6127')
+ax.bar(bar4, TCS_Tesla_NMC['Total electricity ($/mi)'], width=bar_width, color='#AA6127')
 
 
 ax.bar(bar1, TCS_LFP['Total labor ($/mi)'], width=bar_width, bottom=TCS_LFP['Total electricity ($/mi)'], color='#E48825')
 ax.bar(bar2, TCS_NMC['Total labor ($/mi)'], width=bar_width, label='Labor',  bottom= TCS_NMC['Total electricity ($/mi)'], color='#E48825')
+ax.bar(bar3, TCS_Tesla_LFP['Total labor ($/mi)'], width=bar_width, bottom=TCS_Tesla_LFP['Total electricity ($/mi)'], color='#E48825')
+ax.bar(bar4, TCS_Tesla_NMC['Total labor ($/mi)'], width=bar_width, bottom=TCS_Tesla_NMC['Total electricity ($/mi)'], color='#E48825')
+
 
 ax.bar(bar1, TCS_LFP['Other OPEXs ($/mi)'], width=bar_width, bottom=TCS_LFP['Total labor ($/mi)']+TCS_LFP['Total electricity ($/mi)'], color='#F0B05A')
 ax.bar(bar2, TCS_NMC['Other OPEXs ($/mi)'], width=bar_width, label='Other OPEX',  bottom= TCS_NMC['Total labor ($/mi)']+TCS_NMC['Total electricity ($/mi)'], color='#F0B05A')
+ax.bar(bar3, TCS_Tesla_LFP['Other OPEXs ($/mi)'], width=bar_width, bottom=TCS_Tesla_LFP['Total labor ($/mi)']+TCS_Tesla_LFP['Total electricity ($/mi)'], color='#F0B05A')
+ax.bar(bar4, TCS_Tesla_NMC['Other OPEXs ($/mi)'], width=bar_width, bottom=TCS_Tesla_NMC['Total labor ($/mi)']+TCS_Tesla_NMC['Total electricity ($/mi)'], color='#F0B05A')
 
 ax.bar(bar1, TCS_LFP['Total capital ($/mi)'], width=bar_width, bottom=TCS_LFP['Other OPEXs ($/mi)']+TCS_LFP['Total labor ($/mi)']+TCS_LFP['Total electricity ($/mi)'], color='#F7D57C')
 ax.bar(bar2, TCS_NMC['Total capital ($/mi)'], width=bar_width, label='Capital',  bottom= TCS_NMC['Other OPEXs ($/mi)']+TCS_NMC['Total labor ($/mi)']+TCS_NMC['Total electricity ($/mi)'], color='#F7D57C')
+ax.bar(bar3, TCS_Tesla_LFP['Total capital ($/mi)'], width=bar_width, bottom=TCS_Tesla_LFP['Other OPEXs ($/mi)']+TCS_Tesla_LFP['Total labor ($/mi)']+TCS_Tesla_LFP['Total electricity ($/mi)'], color='#F7D57C')
+ax.bar(bar4, TCS_Tesla_NMC['Total capital ($/mi)'], width=bar_width, bottom=TCS_Tesla_NMC['Other OPEXs ($/mi)']+TCS_Tesla_NMC['Total labor ($/mi)']+TCS_Tesla_NMC['Total electricity ($/mi)'], color='#F7D57C')
 
 plt1=ax.bar(bar1, TCS_LFP['GHGs emissions penalty ($/mi)'], width=bar_width, bottom=TCS_LFP['Total capital ($/mi)']+TCS_LFP['Other OPEXs ($/mi)']+TCS_LFP['Total labor ($/mi)']+TCS_LFP['Total electricity ($/mi)'], color='#7EC071')
 plt2=ax.bar(bar2, TCS_NMC['GHGs emissions penalty ($/mi)'], width=bar_width, label='Carbon',  bottom= TCS_NMC['Total capital ($/mi)']+TCS_NMC['Other OPEXs ($/mi)']+TCS_NMC['Total labor ($/mi)']+TCS_NMC['Total electricity ($/mi)'], color='#7EC071')
-
+plt3=ax.bar(bar3, TCS_Tesla_LFP['GHGs emissions penalty ($/mi)'], width=bar_width, bottom=TCS_Tesla_LFP['Total capital ($/mi)']+TCS_Tesla_LFP['Other OPEXs ($/mi)']+TCS_Tesla_LFP['Total labor ($/mi)']+TCS_Tesla_LFP['Total electricity ($/mi)'], color='#7EC071')
+plt4=ax.bar(bar4, TCS_Tesla_NMC['GHGs emissions penalty ($/mi)'], width=bar_width, bottom=TCS_Tesla_NMC['Total capital ($/mi)']+TCS_Tesla_NMC['Other OPEXs ($/mi)']+TCS_Tesla_NMC['Total labor ($/mi)']+TCS_Tesla_NMC['Total electricity ($/mi)'], color='#7EC071')
 
 plt.text(bar1[1], 1.1*TCS_LFP['TCS ($/mi)'][1], 'LFP', ha='center', va='top')
 plt.text(bar2[1], 1.1*TCS_NMC['TCS ($/mi)'][1], 'NMC', ha='center', va='top')
+plt.text(bar3[1], 1.2*TCS_Tesla_LFP['TCS ($/mi)'][1], 'Tesla\nLFP', ha='center', va='top')
+plt.text(bar4[1], 1.2*TCS_Tesla_NMC['TCS ($/mi)'][1], 'Tesla\nNMC', ha='center', va='top')
 
 
 
 ax.set_ylabel('TCS ($/mi)', weight='bold')
-ax.set_xticks([r + bar_width for r in range(len(TCS_LFP.index))])
+ax.set_xticks([(r + bar_width)*1.3 for r in np.arange(len(TCS_LFP.index))])
 ax.set_xticklabels(['Present', 'Mid term', 'Long term'],weight='bold')
 ax.legend(loc='upper right')
 plt.savefig('plots/tcs.png')
+

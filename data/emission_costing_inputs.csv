@@ -1,0 +1,13 @@
+Value,PepsiCo,Nominal Present
+Battery Capacity (central) [kWh],823,Calculated
+Battery Capacity (up) [kWh],825,Calculated
+Battery Capacity (down) [kWh],821,Calculated
+Electricity per mile (central) [kWh/mile],1.83,Calculated
+Electricity per mile (up) [kWh/mile],1.88,Calculated
+Electricity per mile (down) [kWh/mile],1.78,Calculated
+Year 1 VMT (central) [miles/year],187500,108000
+Year 1 VMT (up) [miles/year],196700,108000
+Year 1 VMT (down) [miles/year],178300,108000
+Electricity rate (central) [$/kWh],0.51,0.32
+Electricity rate (up) [$/kWh],0.47,0.32
+Electricity rate (down) [$/kWh],0.55,0.32
