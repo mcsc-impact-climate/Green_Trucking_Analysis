@@ -1,0 +1,9 @@
+Parameter,Value,Units,Source
+LFP battery energy density,170,kWh/ton,
+LFP roundtrip efficiency,0.95,,
+NMC battery energy density,260,kWh/ton,
+NMC roundtrip efficiency,0.93,,
+LFP manufacturing emissions,69000,CO2/kWh,
+LFP replacements,0,,
+NMC manufacturing emissions,86000,CO2/kWh,
+NMC replacements,1,,

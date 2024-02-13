@@ -1,5 +1,5 @@
 Name,Charging Power (kW),Energy per Month (MWh) [optimistic],Energy per Month (MWh) [pessimistic],Demand charge ($/kW) [optimistic],Demand charge ($/kW) [pessimistic],Energy charge ($/kWh) [optimistic],Energy charge ($/kWh) [pessimistic]
 Nominal,150,51.45,17.15,6,20,0.1,0.15
-PepsiCo (central),750,31.4,31.4,6,20,0.1,0.15
-PepsiCo (up),750,34.4,34.4,6,20,0.1,0.15
-PepsiCo (down),750,28.4,28.4,6,20,0.1,0.15
+PepsiCo Tesla Semi (central),750,31.4,31.4,6,20,0.1,0.15
+PepsiCo Tesla Semi (up),750,34.4,34.4,6,20,0.1,0.15
+PepsiCo Tesla Semi (down),750,28.4,28.4,6,20,0.1,0.15

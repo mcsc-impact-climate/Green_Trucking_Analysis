@@ -1,0 +1,6 @@
+,LFP battery energy density,NMC battery energy density,Electricity price,Social cost of carbon,LFP battery unit cost,NMC battery unit cost,Cost of glider,Cost of motor and inverter,Cost of DC-DC converter,Maintenance and repair cost,Labor cost,Insurance cost, Miscellaneous costs
+Present,170,260,0.32,51,100,137,95000,77,90,0.14,0.69,0.19822813,0.05
+Mid term ,230,350,0.32,62,75,100,95000,25,65,0.14,0.69,0.19822813,0.05
+Long term,330,500,0.15,85,70,80,95000,18,65,0.14,0.69,0.19822813,0.05
+Units,kWh/ton,kWh/ton,$/kWh,$/ton CO2,$/kWh,$/kWh,$,$/kW,$/kW,$/mile,$/mile,$/mile,$/mile
+Source,,,Costing code,https://www.whitehouse.gov/wp-content/uploads/2021/02/TechnicalSupportDocument_SocialCostofCarbonMethaneNitrousOxide.pdf,,,,,,,,,

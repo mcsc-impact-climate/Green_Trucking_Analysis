@@ -114,6 +114,6 @@ def plot_electricity_data(title, name_save, costing_data_df, costing_data_df_up=
 
 plot_electricity_data('Nominal', 'nominal', costing_data_df[costing_data_df['Name'] == 'Nominal'], None, None)
 
-plot_electricity_data('PepsiCo Tesla Semi', 'pepsico', costing_data_df[costing_data_df['Name'] == 'PepsiCo (central)'], costing_data_df[costing_data_df['Name'] == 'PepsiCo (up)'], costing_data_df[costing_data_df['Name'] == 'PepsiCo (down)'])
+plot_electricity_data('PepsiCo Tesla Semi', 'tesla', costing_data_df[costing_data_df['Name'] == 'PepsiCo Tesla Semi (central)'], costing_data_df[costing_data_df['Name'] == 'PepsiCo Tesla Semi (up)'], costing_data_df[costing_data_df['Name'] == 'PepsiCo Tesla Semi (down)'])
 
 costing_data_df.to_csv('data/electricity_costing_results.csv')
