@@ -3,4 +3,4 @@ Present,170,260,0.32,51,100,137,95000,77,90,0.14,0.69,0.19822813,0.05
 Mid term ,230,350,0.32,62,75,100,95000,25,65,0.14,0.69,0.19822813,0.05
 Long term,330,500,0.15,85,70,80,95000,18,65,0.14,0.69,0.19822813,0.05
 Units,kWh/ton,kWh/ton,$/kWh,$/ton CO2,$/kWh,$/kWh,$,$/kW,$/kW,$/mile,$/mile,$/mile,$/mile
-Source,,,Costing code,https://www.whitehouse.gov/wp-content/uploads/2021/02/TechnicalSupportDocument_SocialCostofCarbonMethaneNitrousOxide.pdf,,,,,,,,,
+Source,,,Costing code,https://www.whitehouse.gov/wp-content/uploads/2021/02/TechnicalSupportDocument_SocialCostofCarbonMethaneNitrousOxide.pdf,,,"Jones, R et al. (2023). Developing and Benchmarking a US Long-haul Drive Cycle forVehicle Simulations, Costing and Emissions Analysis",https://publications.anl.gov/anlpubs/2021/05/167399.pdf,https://publications.anl.gov/anlpubs/2021/05/167399.pdf,https://publications.anl.gov/anlpubs/2021/05/167399.pdf,https://publications.anl.gov/anlpubs/2021/05/167399.pdf,computed from reported insurance cost (0.1969 $/mi) for a BET vehicle cost (0.9933 $/mi). Source: https://publications.anl.gov/anlpubs/2021/05/167399.pdf,https://publications.anl.gov/anlpubs/2021/05/167399.pdf

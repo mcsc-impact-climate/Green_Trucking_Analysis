@@ -14,8 +14,9 @@ class cost:
   def get_capital(self, vehicle_model_results, replacements, capital_cost_unit,battery_unit_cost,discountfactor):
     #We consider replacement of NMC battery in the 5th year of truck's lifetime
     # DMM: Costs are all per unit power rating, but if you find absolute cost that's fine too
+    print()
     capital = capital_cost_unit['glider ($)'] + (capital_cost_unit['motor and inverter ($/kW)']*self.parameters.p_motor_max/1000) + (capital_cost_unit['DC-DC converter ($/kW)']*self.parameters.p_aux/1000) + ((1+(replacements*discountfactor[5]))*(battery_unit_cost*vehicle_model_results['Energy battery (kWh)']))
-    total_CAPEX= vehicle_model_results['Payload penalty factor']*capital/self.parameters.VMT.sum()
+    total_CAPEX = vehicle_model_results['Payload penalty factor']*capital/self.parameters.VMT.sum()
     return total_CAPEX #in $ per mile
 
   def get_operating(self, vehicle_model_results, replacements, operating_cost_unit, electricity_unit, total_CAPEX,discountfactor):
@@ -35,7 +36,7 @@ class cost:
     costs_total = pd.DataFrame(columns = ['Total capital ($/mi)', 'Total operating ($/mi)', 'Total electricity ($/mi)', 'Total labor ($/mi)', 'Other OPEXs ($/mi)', 'GHGs emissions penalty ($/mi)', 'TCS ($/mi)'])
 
     discountfactor=1/np.power(1+self.parameters.discountrate,np.linspace(0,9,10)) #life time of trucks is 10 years
-    costs_total['Total capital ($/mi)']= cost(self.parameters).get_capital(vehicle_model_results, replacements, capital_cost_unit,battery_unit_cost, discountfactor)
+    costs_total['Total capital ($/mi)'] = cost(self.parameters).get_capital(vehicle_model_results, replacements, capital_cost_unit, battery_unit_cost, discountfactor)
     costs_total[ 'Total operating ($/mi)'], costs_total['Total electricity ($/mi)'], costs_total['Total labor ($/mi)'], costs_total['Other OPEXs ($/mi)']= cost(self.parameters).get_operating(vehicle_model_results, replacements, operating_cost_unit, electricity_unit, costs_total['Total capital ($/mi)'],discountfactor)
     costs_total['GHGs emissions penalty ($/mi)'] = cost(self.parameters).get_penalty_emissions(GHG_emissions['GHGs total (gCO2/mi)'], SCC)
     costs_total['TCS ($/mi)'] = costs_total['Total capital ($/mi)'] + costs_total[ 'Total operating ($/mi)'] + costs_total['GHGs emissions penalty ($/mi)']
