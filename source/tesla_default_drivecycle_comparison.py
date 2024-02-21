@@ -98,7 +98,8 @@ plt.show()
 
 ############################# Evaluate model parameters for Tesla drivecycles #############################
 # Set the drag coefficient to the reported value for the Tesla semi
-parameters.cd = 0.22
+parameters.cd = 0.22   # Source: https://eightify.app/summary/technology-and-innovation/elon-musk-unveils-tesla-semi-impressive-aerodynamic-design-long-range-efficient-charging
+parameters.a_cabin = 10.7  # Source: https://www.motormatchup.com/catalog/Tesla/Semi-Truck/2022/Empty 
 
 # Function to get NACFE results for the given truck and driving event
 def get_nacfe_results(truck_name, driving_event):

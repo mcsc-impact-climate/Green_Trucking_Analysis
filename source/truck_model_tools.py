@@ -172,7 +172,7 @@ class payload:
 ##Output: payload_Penalty --> penalty factor (number of additional trucks to be equivalent with diesel)
 
   def get_penalty(self, payload_distribution, m_bat, alpha):
-    payload_max = self.parameters.m_max- m_bat- self.parameters.m_truck_no_bat #payload+trailer
+    payload_max = self.parameters.m_max - m_bat - self.parameters.m_truck_no_bat #payload+trailer
     payload_distribution['Payload loss (kg)'] = payload_distribution['Payload (kg)'].apply(lambda x: np.maximum(x-payload_max,0))
     payload_penalty = 1 + (alpha*payload_distribution['Payload loss (kg)'].mean())/payload_max
     return payload_penalty
