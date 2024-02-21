@@ -79,7 +79,7 @@ battery_unit_cost_LFP = [float(df_scenarios['LFP battery unit cost'].iloc[0])] #
 ########### Road grade over time ###########
 fig, axs = plt.subplots(2, 1, figsize=(10, 7), gridspec_kw={'height_ratios': [2, 1]})  # 2 rows, 1 column
 axs[0].set_title('Long-haul Drivecycle', fontsize=18)
-axs[0].set_ylabel('Speed (miles/hour)', fontsize=16)
+axs[0].set_ylabel('Speed (m/s)', fontsize=16)
 axs[1].set_ylabel('Road grade (%)', fontsize=16)
 axs[1].set_xlabel('Drive time (h)', fontsize=16)
 axs[0].tick_params(axis='both', which='major', labelsize=14)
@@ -176,7 +176,10 @@ for category in ['Truck Model', 'Emissions Model', 'Costing Model']:
 
 # Make plots for the emissions and costing categories to visualize the differences
 for category in ['Emissions Model', 'Costing Model']:
-    fig, axs = plt.subplots(2, 1, figsize=(14, 7), gridspec_kw={'height_ratios': [2, 1]})  # 2 rows, 1 column
+    if category == 'Emissions Model':
+        fig, axs = plt.subplots(2, 1, figsize=(7, 7), gridspec_kw={'height_ratios': [2, 1]})  # 2 rows, 1 column
+    else:
+        fig, axs = plt.subplots(2, 1, figsize=(10, 7), gridspec_kw={'height_ratios': [2, 1]})  # 2 rows, 1 column
     title_label = category.split(' ')[0]
     axs[0].set_title(f'Impact of Road Grade on Present Day {title_label}', fontsize=18)
     if category == 'Costing Model':

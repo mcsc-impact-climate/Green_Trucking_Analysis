@@ -1,0 +1,18 @@
+Parameter,Value,Units,Source
+Average payload,18811.82,kg,VIUS 2002
+Max gross vehicle weight,36287.39,kg,VIUS 2002
+Base trailer weight,19500,lb,
+Engine weight,3500,lb,https://pubs.acs.org/doi/suppl/10.1021/acs.est.1c01273/suppl_file/es1c01273_si_001.pdf
+Fuel system weight,500,lb,https://pubs.acs.org/doi/suppl/10.1021/acs.est.1c01273/suppl_file/es1c01273_si_001.pdf
+Emission control system weight,550,lb,https://pubs.acs.org/doi/suppl/10.1021/acs.est.1c01273/suppl_file/es1c01273_si_001.pdf
+"Weight of motor, inverter, electronics",880,lb,https://www.transportenvironment.org/wp-content/uploads/2021/07/20180725_T&E_Battery_Electric_Trucks_EU_FINAL.pdf
+Auxiliary power,10000,W,
+Max motor power,425000,W,Model catalogue
+Drag coefficient,0.35,,
+Resistance coefficient,0.007,,
+Frontal cabin area,9.2,m^2,
+Inverter efficiency,0.95,,
+Motor efficiency,0.9,,
+Gear efficiency,0.97,,
+Regenerative braking efficiency,0.8,,
+Depth of discharge,1,,

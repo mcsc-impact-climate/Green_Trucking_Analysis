@@ -112,7 +112,12 @@ class truck_model:
 
     # DMM: e_bat: battery size (kWh). fuel_consumption: energy per unit distance
     e_bat = np.trapz(df['Power request at battery (W)'],df['Time (s)'])*2.7778*np.float_power(10,-7)/self.parameters.DoD #energy of tractive battery in kWh
-    fuel_consumption = np.trapz(df['Power request at battery (W)'],df['Time (s)'])*2.7778*np.float_power(10,-7)/(np.trapz(df['Simulated vehicle speed (m/s)'],df['Time (s)'])/(1.609344*1000)) #energy consumption in kWh/mile
+    cSpeed = (df['Simulated vehicle speed (m/s)'] < 30) & (df['Simulated vehicle speed (m/s)'] >= 0)
+#    import matplotlib.pyplot as plt
+#    plt.plot(df['Simulated vehicle speed (m/s)'][(df['Simulated vehicle speed (m/s)'] < 30) & (df['Simulated vehicle speed (m/s)'] >= 0)])
+#    plt.show()
+#    plt.close()
+    fuel_consumption = np.trapz(df['Power request at battery (W)'][cSpeed], df['Time (s)'][cSpeed])*2.7778*np.float_power(10,-7)/(np.trapz(df['Simulated vehicle speed (m/s)'][cSpeed], df['Time (s)'][cSpeed])/(1.609344*1000)) #energy consumption in kWh/mile
 
     return df, e_bat, fuel_consumption
 
@@ -137,11 +142,18 @@ class truck_model:
       df, e_bat, mileage = truck_model(self.parameters).get_power_requirement(df, m, eta_battery)
       m_bat = e_bat*KG_PER_TON/e_density;  #battery weight in kg
 
-
     return m_bat, e_bat, mileage, m
     
 def extract_drivecycle_data(f_drivecycle):
-    df = pd.read_excel(f_drivecycle) #drive cycle as a dataframe
+    if f_drivecycle.endswith('.xlsx'):
+        df = pd.read_excel(f_drivecycle) #drive cycle as a dataframe
+    elif f_drivecycle.endswith('.csv'):
+        df = pd.read_csv(f_drivecycle) #drive cycle as a dataframe
+
+    else:
+        extension = f_drivecycle.split('.')[-1]
+        print(f'Cannot process drivecycle data for file ending in {extension}')
+        return None
     df['Vehicle speed (m/s)'] = df['Vehicle speed (km/h)']*1000/3600 #vehicle speed converted from km/h to m/s
     df = df.drop(['Vehicle speed (km/h)'],axis=1) #remove column with vehicle speed in km/h
     df['Acceleration (m/s2)'] = df['Vehicle speed (m/s)'].diff()/df['Time (s)'].diff() #calculate acceleration in m/s2
@@ -150,7 +162,7 @@ def extract_drivecycle_data(f_drivecycle):
     df['Cumulative distance (m)']= integrate.cumtrapz(df['Vehicle speed (m/s)'],df['Time (s)'], initial=0)
     
     return df
-
+    
 ####****Input parameters for payload penalty analysis****####
 class payload:
   def __init__(self, parameters):
