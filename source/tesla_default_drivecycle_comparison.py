@@ -209,6 +209,7 @@ def visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_re
     axs[2].legend(fontsize=16)
     plt.tight_layout()
     plt.savefig(f'plots/truck_model_results_vs_payload_{truck_name}_drivecycle_{driving_event}.png')
+    plt.close()
 
 # Evaluate GVW for each truck and drivecycle event
 
@@ -288,5 +289,6 @@ for i in range(len(data_boxplot)):
 
 plt.tight_layout()
 plt.savefig('plots/Evaluated_GVW_Distribution.png')
+plt.close()
 ###########################################################################################################
 
