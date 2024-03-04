@@ -18,7 +18,7 @@ class read_parameters:
     # Weights and payloads
     self.m_ave_payload = float(df_truck_params['Value'].loc['Average payload'])
     self.m_max = float(df_truck_params['Value'].loc['Max gross vehicle weight'])
-    self.m_truck_no_bat = ( float(df_truck_params['Value'].loc['Base trailer weight']) + float(df_truck_params['Value'].loc['Weight of motor, inverter, electronics']) - float(df_truck_params['Value'].loc['Engine weight']) - float(df_truck_params['Value'].loc['Emission control system weight']) - float(df_truck_params['Value'].loc['Fuel system weight']) ) * KG_PER_LB
+    self.m_truck_no_bat = ( float(df_truck_params['Value'].loc['Diesel tractor weight']) + float(df_truck_params['Value'].loc['Weight of motor, inverter, electronics']) - float(df_truck_params['Value'].loc['Engine weight']) - float(df_truck_params['Value'].loc['Emission control system weight']) - float(df_truck_params['Value'].loc['Fuel system weight']) ) * KG_PER_LB
     self.m_guess = self.m_ave_payload + self.m_truck_no_bat
 
     # Power consumption
@@ -137,8 +137,8 @@ class truck_model:
       epsilon = abs(m - m_guess)
       m_guess = m
     if m > self.parameters.m_max: #case where the GVW exceeds the limit of 80k pounds
-      print('Maximum total truck mass (80000 lbs) exceeded')
-      m = self.parameters.m_max #GVW=80k pounds
+      print('Maximum total truck mass (82000 lbs) exceeded')
+      m = self.parameters.m_max #GVW=82k pounds
       df, e_bat, mileage = truck_model(self.parameters).get_power_requirement(df, m, eta_battery)
       m_bat = e_bat*KG_PER_TON/e_density;  #battery weight in kg
 

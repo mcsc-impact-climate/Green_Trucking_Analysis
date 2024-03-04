@@ -15,6 +15,8 @@ import emissions_tools
 from scipy.interpolate import interp1d
 from scipy.optimize import root_scalar
 import pickle
+import concurrent.futures
+from datetime import datetime
 
 new_rc_params = {'text.usetex': False,
 "svg.fonttype": 'none'
@@ -83,27 +85,11 @@ SCC = [float(df_scenarios['Social cost of carbon'].iloc[0])] #social cost of car
 battery_unit_cost_LFP = [float(df_scenarios['LFP battery unit cost'].iloc[0])] #LFP unit cost in $/kWh
 ###########################################################################################################
 
-"""
-################################# Analyze the VIUS payload distribution ###################################
-fig, ax = plt.subplots(figsize=(10, 6))
-ax.tick_params(axis='both', which='major', labelsize=14)
-n, bins, patches = ax.hist(df_payload_distribution['Payload (lb)'], bins=100)
-bin_width = bins[1] - bins[0]
-ax.set_xlabel('Payload (lb)', fontsize=16)
-ax.set_ylabel(f'Events / {bin_width:.0f}lb', fontsize=16)
-plt.show()
-###########################################################################################################
-"""
-
-
 ############################# Evaluate model parameters for Tesla drivecycles #############################
 # Set the drag coefficient to the reported value for the Tesla semi
 parameters.cd = 0.22   # Source: https://eightify.app/summary/technology-and-innovation/elon-musk-unveils-tesla-semi-impressive-aerodynamic-design-long-range-efficient-charging
 parameters.a_cabin = 10.7  # Source: https://www.motormatchup.com/catalog/Tesla/Semi-Truck/2022/Empty
-#parameters.p_motor_max = 1000000
-#parameters.eta_m = 0.95
-#parameters.eta_gs = 1.
-#parameters.eta_i = 0.98
+parameters.p_motor_max = 942900   # Source: https://www.motormatchup.com/catalog/Tesla/Semi-Truck/2022/Empty
 
 # Function to get NACFE results for the given truck and driving event
 def get_nacfe_results(truck_name, driving_event):
@@ -130,7 +116,6 @@ def update_event_dod(parameters, truck_name, driving_event):
     drivecycle_data_df = pd.read_csv(f'data/{truck_name}_drivecycle_data.csv', index_col='Driving event')
     parameters.DoD = drivecycle_data_df['Depth of Discharge (%)'].loc[driving_event]/100.
 
-
 # Function to get truck model results over a range of payload sizes
 def get_model_results_vs_payload(truck_name, driving_event, payload_min=0, payload_max=70000, n_payloads=10):
 
@@ -151,7 +136,7 @@ def get_model_results_vs_payload(truck_name, driving_event, payload_min=0, paylo
     return vehicle_model_results
     
 # Function to evaluate the payload and GVW for which the fuel economy and battery capacity best match the values extrapolated from the NACFE data
-def evaluate_matching_payloads(vehicle_model_results, payload_min=0, payload_max=70000):
+def evaluate_matching_payloads(vehicle_model_results, NACFE_results, payload_min=0, payload_max=70000):
     cs_e_bat = interp1d(vehicle_model_results['Average Payload (lb)'], vehicle_model_results['Battery capacity (kWh)'])
     cs_mileage = interp1d(vehicle_model_results['Average Payload (lb)'], vehicle_model_results['Fuel economy (kWh/mi)'])
     cs_m = interp1d(vehicle_model_results['Average Payload (lb)'], vehicle_model_results['Total vehicle mass (lbs)'])
@@ -168,13 +153,11 @@ def evaluate_matching_payloads(vehicle_model_results, payload_min=0, payload_max
     return payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m
 
 # Function to visualize fit results
-def visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_results, payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m, combined_eff=None, max_power=None):
+def visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_results, payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m, combined_eff=None):
     fig, axs = plt.subplots(3, 1, figsize=(14, 10), gridspec_kw={'height_ratios': [1, 1, 1]})  # 3 rows, 1 column
     name_title = truck_name.replace('_', ' ').capitalize()
     if not combined_eff is None:
         axs[0].set_title(f'{name_title}: Payload Estimation for Driving Event {driving_event} (Combined Eff: {combined_eff:.2f})', fontsize=20)
-    elif not max_power is None:
-        axs[0].set_title(f'{name_title}: Payload Estimation for Driving Event {driving_event} (Max Power: {max_power:.0f})', fontsize=20)
     else:
         axs[0].set_title(f'{name_title}: Payload Estimation for Driving Event {driving_event}', fontsize=20)
     axs[0].tick_params(axis='both', which='major', labelsize=14)
@@ -222,16 +205,13 @@ def visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_re
     if not combined_eff is None:
         combined_eff_save = str(combined_eff).replace('.', '')
         plt.savefig(f'plots/truck_model_results_vs_payload_{truck_name}_drivecycle_{driving_event}_combinedeff_{combined_eff_save}.png')
-    elif not max_power is None:
-        max_power_save = str(int(max_power))
-        plt.savefig(f'plots/truck_model_results_vs_payload_{truck_name}_drivecycle_{driving_event}_maxpower_{max_power_save}.png')
     else:
         plt.savefig(f'plots/truck_model_results_vs_payload_{truck_name}_drivecycle_{driving_event}.png')
     plt.close()
 
-
 """
 # Evaluate GVW for each truck and drivecycle event
+
 evaluated_gvws = {}
 for truck_name in drivecycles:
     evaluated_gvws[truck_name] = []
@@ -252,7 +232,7 @@ for truck_name in drivecycles:
         payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m = evaluate_matching_payloads(vehicle_model_results)
         
         # Visualize the results
-        visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_results, payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m)
+        visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_results, payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage)
         
         # Document the evaluated GVW
         evaluated_gvws[truck_name].append(gvw_payload_average)
@@ -260,10 +240,9 @@ for truck_name in drivecycles:
 # Save the evaluated GVWs as a pickle file
 with open('pickle/fitted_gvws.pkl', 'wb') as f:
     pickle.dump(evaluated_gvws, f)
-"""
 ###########################################################################################################
 
-"""
+
 ######################### Analyze the distribution of GVWs evaluated by the model #########################
 with open('pickle/fitted_gvws.pkl', 'rb') as f:
     evaluated_gvws = pickle.load(f)
@@ -313,75 +292,22 @@ plt.close()
 ###########################################################################################################
 """
 
-"""
 ####################### Plot the best-fitting GVW as a function of various parameters #####################
 # Allow the max motor power to vary between 300,000W and 1,000,000W
-truck_name = 'pepsi_1'
-name_title = truck_name.replace('_', ' ').capitalize()
-driving_event = 2
-motor_powers = np.linspace(300000, 1000000, 10)
-
-
-########## Evaluate best-fitting GVW vs. max motor power ##########
-evaluated_gvws_df = pd.DataFrame(columns=['Max Motor Power (W)', 'Max GVW (lb)'])
-for power in motor_powers:
-    parameters.p_motor_max = power
-    
-    print(f'Processing {truck_name} event {driving_event} with motor power {power:.0f}W')
-        
-    # Read in the NACFE results
-    NACFE_results = get_nacfe_results(truck_name, driving_event)
-    
-    # Update the depth of discharge for the driving event based on the NACFE data
-    update_event_dod(parameters, truck_name, driving_event)
-    
-    # Get the vehicle model results (as a dataframe) as a function of payload
-    vehicle_model_results = get_model_results_vs_payload(truck_name, driving_event)
-    
-    # Get the payloads and resulting GVW for which the truck model results best match the NACFE data. Also collect the cubic splines used for this evaluation (for the purpose of visualization)
-    payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m = evaluate_matching_payloads(vehicle_model_results)
-    
-    # Visualize the results
-    visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_results, payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m, max_power=power)
-    
-    # Document the evaluated GVW
-    evaluated_gvws_df = pd.concat([evaluated_gvws_df, pd.DataFrame({'Max Motor Power (W)': [power], 'Max GVW (lb)': [gvw_payload_average]})], ignore_index=True)
-        
-# Save the evaluated GVWs as a pickle file
-with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_motor_power.pkl', 'wb') as f:
-    pickle.dump(evaluated_gvws_df, f)
-###################################################################
-
-
-############ Plot best-fitting GVW vs. max motor power ############
-with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_motor_power.pkl', 'rb') as f:
-    evaluated_gvws_df = pickle.load(f)
-
-fig, ax = plt.subplots(figsize=(8, 5))
-ax.set_title(f'{name_title} Event {driving_event}', fontsize=20)
-ax.set_ylabel('GVW best matching NACFE Results (lbs)', fontsize=15)
-ax.set_xlabel('Max Motor Power (W)', fontsize=15)
-ax.tick_params(axis='both', which='major', labelsize=14)
-ax.plot(evaluated_gvws_df['Max Motor Power (W)'], evaluated_gvws_df['Max GVW (lb)'], 'o')
-ax.axvline(942900, color='red', ls='--', label='Tesla Semi Motor Power')
-ax.legend(fontsize=16)
-plt.savefig('plots/matching_gvw_vs_max_motor_power.png')
-
-###################################################################
-"""
-
-
-"""
-############# Evaluate best-fitting GVW vs. efficiency ############
-evaluated_gvws_df = pd.DataFrame(columns=['Max GVW (lb)', 'Combined efficiency'])
+truck_names = ['pepsi_1', 'pepsi_2', 'pepsi_3']
+driving_events = {
+    'pepsi_1': [2, 9, 13, 15, 33],
+    'pepsi_2': [7, 10, 14, 22, 25, 31],
+    'pepsi_3': [8, 10, 13, 16, 21, 24, 28, 32, 33]
+}
 combined_effs = np.linspace(0.83, 1., 10)
-parameters.p_motor_max = 942900
-for combined_eff in combined_effs:
+
+def evaluate_matching_gvw(truck_name, driving_event, combined_eff):
     parameters.eta_i = 1.
     parameters.eta_m = 1.
     parameters.eta_gs = combined_eff
     
-    print(f'Processing {truck_name} event {driving_event} with combined efficiency {combined_eff:.2f}W')
+#    print(f'Processing {truck_name} event {driving_event} with combined efficiency {combined_eff:.2f}W')
         
     # Read in the NACFE results
     NACFE_results = get_nacfe_results(truck_name, driving_event)
@@ -393,35 +319,97 @@ for combined_eff in combined_effs:
     vehicle_model_results = get_model_results_vs_payload(truck_name, driving_event)
     
     # Get the payloads and resulting GVW for which the truck model results best match the NACFE data. Also collect the cubic splines used for this evaluation (for the purpose of visualization)
-    payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m = evaluate_matching_payloads(vehicle_model_results)
+    payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m = evaluate_matching_payloads(vehicle_model_results, NACFE_results)
+    battery_weight_payload_average = gvw_payload_average - payload_average - parameters.m_truck_no_bat / KG_PER_LB
+    tractor_weight_payload_average = gvw_payload_average - payload_average
     
-    print(f'Evaluated GVW: {gvw_payload_average}')
+#    print(f'Evaluated GVW: {gvw_payload_average}')
     
     # Visualize the results
-    visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_results, payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage)
+    visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_results, payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m, combined_eff=combined_eff)
     
     # Document the evaluated GVW
-    evaluated_gvws_df = pd.concat([evaluated_gvws_df, pd.DataFrame({'Combined efficiency': [combined_eff], 'Max GVW (lb)': [gvw_payload_average]})], ignore_index=True)
-        
+    #evaluated_gvws_df = pd.concat([evaluated_gvws_df, pd.DataFrame({'Combined efficiency': [combined_eff], 'Max GVW (lb)': [gvw_payload_average]})], ignore_index=True)
+    
+    return combined_eff, gvw_payload_average, battery_weight_payload_average, tractor_weight_payload_average
+
+"""
+startTime = datetime.now()
+truck_name = 'pepsi_1'
+driving_event = 2
+combined_effs = np.linspace(0.83, 1., 10)
+evaluated_gvws_df = pd.DataFrame(columns=['Combined efficiency', 'Max GVW (lb)', 'Battery weight (lb)', 'Tractor weight (lb)'])
+
+for combined_eff in combined_effs:
+    combined_eff, gvw_payload_average, battery_weight_payload_average, tractor_weight_payload_average = evaluate_matching_gvw(truck_name, driving_event, combined_eff)
+    evaluated_gvws_df = pd.concat([evaluated_gvws_df, pd.DataFrame({'Combined efficiency': [combined_eff], 'Max GVW (lb)': [gvw_payload_average], 'Battery weight (lb)': [battery_weight_payload_average], 'Tractor weight (lb)': [tractor_weight_payload_average]})], ignore_index=True)
+    
+run_time = datetime.now() - startTime
+print(f'Time to run in parallel: {run_time}s')
+
 # Save the evaluated GVWs as a pickle file
 with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_combined_eff.pkl', 'wb') as f:
     pickle.dump(evaluated_gvws_df, f)
+"""
+
+def parallel_evaluate_matching_gvw(args):
+
+    # Wrapper function to call evaluate_matching_gvw with a specific combined_eff.
+    # This is necessary because ProcessPoolExecutor.map only works with functions that take a single argument.
+    
+    # Unpack arguments
+    truck_name, driving_event, combined_eff = args
+    
+    return evaluate_matching_gvw(truck_name, driving_event, combined_eff)
+
+def main():
+    # Define parameters
+    for truck_name in drivecycles:
+        drivecycle_events_list = drivecycles[truck_name]
+        for driving_event in drivecycle_events_list:
+    
+            startTime = datetime.now()
+            print(f'Processing {truck_name} event {driving_event}')
+            
+            combined_effs = np.linspace(0.83, 1., 10)
+            # Prepare a list of tuples where each tuple contains all arguments for a single call to parallel_evaluate_matching_gvw
+            args_list = [(truck_name, driving_event, combined_eff) for combined_eff in combined_effs]
+
+            # Use ProcessPoolExecutor to parallelize the evaluation
+            with concurrent.futures.ProcessPoolExecutor() as executor:
+                results = list(executor.map(parallel_evaluate_matching_gvw, args_list))
+
+            # Assuming results are in the format expected, create a DataFrame
+            evaluated_gvws_df = pd.DataFrame(results, columns=['Combined efficiency', 'Fitted GVW (lb)', 'Battery weight (lb)', 'Tractor weight (lb)'])
+
+            # Save the evaluated GVWs as a csv file
+            filename = f'tables/fitted_gvws_{truck_name}_{driving_event}_vs_combined_eff.csv'
+            
+            evaluated_gvws_df.to_csv(filename, index=False)
+            
+            run_time = datetime.now() - startTime
+            run_time = run_time.total_seconds()
+            print(f'Processing time for event: {run_time}s')
+        
+if __name__ == '__main__':
+    main()
+
+
 ###################################################################
 
 
-############ Plot best-fitting GVW vs. combined efficiency ############
-with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_combined_eff.pkl', 'rb') as f:
-    evaluated_gvws_df = pickle.load(f)
-
-fig, ax = plt.subplots(figsize=(8, 5))
-ax.set_title(f'{name_title} Event {driving_event}', fontsize=20)
-ax.set_ylabel('GVW best matching NACFE Results (lbs)', fontsize=15)
-ax.set_xlabel('Combined powertrain efficiency (%)', fontsize=15)
-ax.tick_params(axis='both', which='major', labelsize=14)
-ax.plot(evaluated_gvws_df['Combined efficiency'], evaluated_gvws_df['Max GVW (lb)'], 'o')
-plt.savefig('plots/matching_gvw_vs_combined_eff.png')
-
-###################################################################
+############# Plot best-fitting GVW vs. combined efficiency ############
+#with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_combined_eff.pkl', 'rb') as f:
+#    evaluated_gvws_df = pickle.load(f)
+#
+#fig, ax = plt.subplots(figsize=(8, 5))
+#name_title = truck_name.replace('_', ' ').capitalize()
+#ax.set_title(f'{name_title} Event {driving_event}', fontsize=20)
+#ax.set_ylabel('GVW best matching NACFE Results (lbs)', fontsize=15)
+#ax.set_xlabel('Combined powertrain efficiency (%)', fontsize=15)
+#ax.tick_params(axis='both', which='major', labelsize=14)
+#ax.plot(evaluated_gvws_df['Combined efficiency'], evaluated_gvws_df['Max GVW (lb)'], 'o')
+#plt.savefig('plots/matching_gvw_vs_combined_eff.png')
+####################################################################
     
 ###########################################################################################################
-"""
