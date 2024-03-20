@@ -78,6 +78,32 @@ class share_parameters:
 class truck_model:
   def __init__(self, parameters):
     self.parameters = parameters
+    
+  def get_simulated_vehicle_power(self, df, m):
+  
+    # Remove any elements with big time jumps
+    delta_t = df['Time (s)'].diff().fillna(0) #calculate time steps (delta time= 1 seconds for the US long haul drive cycle used). first data point Na is filled with zero
+    df = df[delta_t < 1.5].reset_index(drop=True)
+    delta_t = delta_t[delta_t < 1.5].reset_index(drop=True)
+    v_drive_cycle = df['Vehicle speed (m/s)'].shift(-1)
+    road_angle = df['Road angle']
+    simulated_vehicle_speed, power_request_motor= [0],[] #initialize variables for simulated vehicle speed as motor is limited to deliver 425kW
+
+    for i in range(len(v_drive_cycle)-1):
+      target_acceleration = v_drive_cycle[i] - simulated_vehicle_speed[i] #required acceleration to match drive cycle in terms of vehicle speed
+      fr = m*self.parameters.g*self.parameters.cr*np.cos(road_angle[i]) #force from rolling resistance in N
+      fg = m*self.parameters.g*np.sin(road_angle[i]) #force from gravitational in N
+      fd = self.parameters.rho_air*self.parameters.a_cabin*self.parameters.cd*np.power(simulated_vehicle_speed[i],2)/2 #force from aerodynamic drag in N
+      maximum_acceleration = ((self.parameters.p_motor_max*self.parameters.eta_i*self.parameters.eta_m*self.parameters.eta_gs/simulated_vehicle_speed[i]) - fr - fg - fd)/m if simulated_vehicle_speed[i] > 0 else 1e9
+
+      a=min(target_acceleration,maximum_acceleration) #minimum acceleration between target acceleration to follow drive cycle versus maximum acceleration of truck at Pmax
+      simulated_vehicle_speed.append(simulated_vehicle_speed[i]+a*delta_t[i]) #update vehicle speed for next iteration
+
+      fa=m*a
+      power_request_wheels= (fr + fg + fd + fa)* simulated_vehicle_speed[i] #total power request at the wheels in W
+      power_request_motor.append(self.parameters.eta_rb*power_request_wheels if power_request_wheels<0 else power_request_wheels/(self.parameters.eta_i*self.parameters.eta_m*self.parameters.eta_gs)) #total power request at the motor in W
+      
+    return df, simulated_vehicle_speed, power_request_motor
 
 
   ##Inputs: dataframe df with drive cycle data, eta_battery--->battery efficiency (#), m---> total truck mass (kg)
