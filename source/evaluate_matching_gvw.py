@@ -58,15 +58,15 @@ parameters = truck_model_tools.read_parameters('data/default_truck_params.csv', 
 # Read in default battery parameters
 df_battery_data = pd.read_csv('data/default_battery_params.csv', index_col=0)
 
-# Read in present LFP battery parameters
+# Read in present NMC battery parameters
 df_scenarios = pd.read_csv('data/scenario_data.csv', index_col=0)
-e_present_density_LFP = float(df_scenarios['LFP battery energy density'].iloc[0])
-eta_battery_LFP = df_battery_data['Value'].loc['LFP roundtrip efficiency']
+e_present_density_NMC = float(df_scenarios['NMC battery energy density'].iloc[0])
+eta_battery_NMC = 0.95      # https://www.statista.com/statistics/1423012/efficiency-of-battery-energy-systems/
 alpha = 1 #for payload penalty factor calculations (alpha = 1 for base case, alpha = 2: complete dependency in payload measurements)
 
 # Read in GHG emissions parameters
-GHG_bat_unit_LFP = df_battery_data['Value'].loc['LFP manufacturing emissions'] #g CO2/kWh
-replacements_LFP = df_battery_data['Value'].loc['LFP replacements']
+GHG_bat_unit_NMC = df_battery_data['Value'].loc['NMC manufacturing emissions'] #g CO2/kWh
+replacements_NMC = df_battery_data['Value'].loc['NMC replacements']
 
 # Read in costing parameters for present day scenario
 
@@ -82,7 +82,7 @@ electricity_unit = [float(df_scenarios['Electricity price'].iloc[0])]
 
 SCC = [float(df_scenarios['Social cost of carbon'].iloc[0])] #social cost of carbon in $/ton CO2. Source: https://www.whitehouse.gov/wp-content/uploads/2021/02/TechnicalSupportDocument_SocialCostofCarbonMethaneNitrousOxide.pdf
 
-battery_unit_cost_LFP = [float(df_scenarios['LFP battery unit cost'].iloc[0])] #LFP unit cost in $/kWh
+battery_unit_cost_NMC = [float(df_scenarios['NMC battery unit cost'].iloc[0])] #NMC unit cost in $/kWh
 ###########################################################################################################
 
 ############################# Evaluate model parameters for Tesla drivecycles #############################
@@ -125,7 +125,7 @@ def get_model_results_vs_payload(truck_name, driving_event, payload_min=0, paylo
     vehicle_model_results = pd.DataFrame(columns = ['Average Payload (lb)', 'Battery capacity (kWh)', 'Fuel economy (kWh/mi)', 'Total vehicle mass (lbs)'])
     for m_ave_payload in np.linspace(payload_min, payload_max, n_payloads):
         parameters.m_ave_payload = m_ave_payload * KG_PER_LB
-        m_bat, e_bat, mileage, m = truck_model_tools.truck_model(parameters).get_battery_size(df_drivecycle, eta_battery_LFP, e_present_density_LFP)
+        m_bat, e_bat, mileage, m = truck_model_tools.truck_model(parameters).get_battery_size(df_drivecycle, eta_battery_NMC, e_present_density_NMC)
         new_row = new_row = pd.DataFrame({
             'Average Payload (lb)': [m_ave_payload],
             'Battery capacity (kWh)': [e_bat],

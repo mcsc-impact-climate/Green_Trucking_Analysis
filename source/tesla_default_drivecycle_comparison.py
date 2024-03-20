@@ -56,15 +56,15 @@ parameters = truck_model_tools.read_parameters('data/default_truck_params.csv', 
 # Read in default battery parameters
 df_battery_data = pd.read_csv('data/default_battery_params.csv', index_col=0)
 
-# Read in present LFP battery parameters
+# Read in present NMC battery parameters
 df_scenarios = pd.read_csv('data/scenario_data.csv', index_col=0)
-e_present_density_LFP = float(df_scenarios['LFP battery energy density'].iloc[0])
-eta_battery_LFP = df_battery_data['Value'].loc['LFP roundtrip efficiency']
+e_present_density_NMC = float(df_scenarios['NMC battery energy density'].iloc[0])
+eta_battery_NMC = df_battery_data['Value'].loc['NMC roundtrip efficiency']
 alpha = 1 #for payload penalty factor calculations (alpha = 1 for base case, alpha = 2: complete dependency in payload measurements)
 
 # Read in GHG emissions parameters
-GHG_bat_unit_LFP = df_battery_data['Value'].loc['LFP manufacturing emissions'] #g CO2/kWh
-replacements_LFP = df_battery_data['Value'].loc['LFP replacements']
+GHG_bat_unit_NMC = df_battery_data['Value'].loc['NMC manufacturing emissions'] #g CO2/kWh
+replacements_NMC = df_battery_data['Value'].loc['NMC replacements']
 
 # Read in costing parameters for present day scenario
 
@@ -80,7 +80,7 @@ electricity_unit = [float(df_scenarios['Electricity price'].iloc[0])]
 
 SCC = [float(df_scenarios['Social cost of carbon'].iloc[0])] #social cost of carbon in $/ton CO2. Source: https://www.whitehouse.gov/wp-content/uploads/2021/02/TechnicalSupportDocument_SocialCostofCarbonMethaneNitrousOxide.pdf
 
-battery_unit_cost_LFP = [float(df_scenarios['LFP battery unit cost'].iloc[0])] #LFP unit cost in $/kWh
+battery_unit_cost_NMC = [float(df_scenarios['NMC battery unit cost'].iloc[0])] #NMC unit cost in $/kWh
 ###########################################################################################################
 
 """
@@ -104,6 +104,7 @@ parameters.a_cabin = 10.7  # Source: https://www.motormatchup.com/catalog/Tesla/
 #parameters.eta_m = 0.95
 #parameters.eta_gs = 1.
 #parameters.eta_i = 0.98
+###########################################################################################################
 
 # Function to get NACFE results for the given truck and driving event
 def get_nacfe_results(truck_name, driving_event):
@@ -132,7 +133,7 @@ def update_event_dod(parameters, truck_name, driving_event):
 
 
 # Function to get truck model results over a range of payload sizes
-def get_model_results_vs_payload(truck_name, driving_event, payload_min=0, payload_max=70000, n_payloads=10):
+def get_model_results_vs_payload(truck_name, driving_event, payload_min=0, payload_max=70000, n_payloads=10, e_density_battery = e_present_density_NMC, battery_roundtrip_efficiency = eta_battery_NMC):
 
     # Collect the drivecycle
     df_drivecycle = truck_model_tools.extract_drivecycle_data(f'data/{truck_name}_drive_cycle_{driving_event}.csv')
@@ -140,7 +141,7 @@ def get_model_results_vs_payload(truck_name, driving_event, payload_min=0, paylo
     vehicle_model_results = pd.DataFrame(columns = ['Average Payload (lb)', 'Battery capacity (kWh)', 'Fuel economy (kWh/mi)', 'Total vehicle mass (lbs)'])
     for m_ave_payload in np.linspace(payload_min, payload_max, n_payloads):
         parameters.m_ave_payload = m_ave_payload * KG_PER_LB
-        m_bat, e_bat, mileage, m = truck_model_tools.truck_model(parameters).get_battery_size(df_drivecycle, eta_battery_LFP, e_present_density_LFP)
+        m_bat, e_bat, mileage, m = truck_model_tools.truck_model(parameters).get_battery_size(df_drivecycle, battery_roundtrip_efficiency, e_density_battery)
         new_row = new_row = pd.DataFrame({
             'Average Payload (lb)': [m_ave_payload],
             'Battery capacity (kWh)': [e_bat],
@@ -168,13 +169,17 @@ def evaluate_matching_payloads(vehicle_model_results, payload_min=0, payload_max
     return payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m
 
 # Function to visualize fit results
-def visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_results, payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m, combined_eff=None, max_power=None):
+def visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_results, payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m, combined_eff=None, max_power=None, battery_energy_density=None, battery_roundtrip_efficiency=None):
     fig, axs = plt.subplots(3, 1, figsize=(14, 10), gridspec_kw={'height_ratios': [1, 1, 1]})  # 3 rows, 1 column
     name_title = truck_name.replace('_', ' ').capitalize()
     if not combined_eff is None:
         axs[0].set_title(f'{name_title}: Payload Estimation for Driving Event {driving_event} (Combined Eff: {combined_eff:.2f})', fontsize=20)
     elif not max_power is None:
         axs[0].set_title(f'{name_title}: Payload Estimation for Driving Event {driving_event} (Max Power: {max_power:.0f})', fontsize=20)
+    elif not battery_energy_density is None:
+        axs[0].set_title(f'{name_title}: Payload Estimation for Driving Event {driving_event} (Battery Energy Density: {battery_energy_density:.0f} kWh/ton)', fontsize=20)
+    elif not battery_roundtrip_efficiency is None:
+        axs[0].set_title(f'{name_title}: Payload Estimation for Driving Event {driving_event} (Battery Roundtrip Efficiency: {battery_roundtrip_efficiency:.2f})', fontsize=20)
     else:
         axs[0].set_title(f'{name_title}: Payload Estimation for Driving Event {driving_event}', fontsize=20)
     axs[0].tick_params(axis='both', which='major', labelsize=14)
@@ -225,10 +230,15 @@ def visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_re
     elif not max_power is None:
         max_power_save = str(int(max_power))
         plt.savefig(f'plots/truck_model_results_vs_payload_{truck_name}_drivecycle_{driving_event}_maxpower_{max_power_save}.png')
+    elif not battery_energy_density is None:
+        battery_energy_density_save = str(int(battery_energy_density))
+        plt.savefig(f'plots/truck_model_results_vs_payload_{truck_name}_drivecycle_{driving_event}_battery_density_{battery_energy_density_save}.png')
+    elif not battery_roundtrip_efficiency is None:
+        battery_roundtrip_efficiency_save = str(int(battery_roundtrip_efficiency))
+        plt.savefig(f'plots/truck_model_results_vs_payload_{truck_name}_drivecycle_{driving_event}_battery_roundtrip_efficiency_{battery_roundtrip_efficiency_save}.png')
     else:
         plt.savefig(f'plots/truck_model_results_vs_payload_{truck_name}_drivecycle_{driving_event}.png')
     plt.close()
-
 
 """
 # Evaluate GVW for each truck and drivecycle event
@@ -256,7 +266,7 @@ for truck_name in drivecycles:
         
         # Document the evaluated GVW
         evaluated_gvws[truck_name].append(gvw_payload_average)
-        
+
 # Save the evaluated GVWs as a pickle file
 with open('pickle/fitted_gvws.pkl', 'wb') as f:
     pickle.dump(evaluated_gvws, f)
@@ -368,10 +378,8 @@ ax.legend(fontsize=16)
 plt.savefig('plots/matching_gvw_vs_max_motor_power.png')
 
 ###################################################################
-"""
 
 
-"""
 ############# Evaluate best-fitting GVW vs. efficiency ############
 evaluated_gvws_df = pd.DataFrame(columns=['Max GVW (lb)', 'Combined efficiency'])
 combined_effs = np.linspace(0.83, 1., 10)
@@ -425,3 +433,110 @@ plt.savefig('plots/matching_gvw_vs_combined_eff.png')
     
 ###########################################################################################################
 """
+
+"""
+############# Evaluate best-fitting GVW vs. energy density ############
+truck_name = 'pepsi_1'
+name_title = truck_name.replace('_', ' ').capitalize()
+driving_event = 2
+evaluated_gvws_df = pd.DataFrame(columns=['Max GVW (lb)', 'Battery Energy Density (kWh/ton)'])
+battery_energy_densities = np.linspace(150, 500, 10)
+
+for e_density_battery in battery_energy_densities:
+    
+    print(f'Processing {truck_name} event {driving_event} with energy denstiy {e_density_battery:.0f}kWh/ton')
+        
+    # Read in the NACFE results
+    NACFE_results = get_nacfe_results(truck_name, driving_event)
+    
+    # Update the depth of discharge for the driving event based on the NACFE data
+    update_event_dod(parameters, truck_name, driving_event)
+    
+    # Get the vehicle model results (as a dataframe) as a function of payload
+    vehicle_model_results = get_model_results_vs_payload(truck_name, driving_event, e_density_battery = e_density_battery)
+    
+    # Get the payloads and resulting GVW for which the truck model results best match the NACFE data. Also collect the cubic splines used for this evaluation (for the purpose of visualization)
+    payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m = evaluate_matching_payloads(vehicle_model_results)
+    
+    print(f'Evaluated GVW: {gvw_payload_average}')
+    
+    # Visualize the results
+    visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_results, payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m, battery_energy_density = e_density_battery)
+    
+    # Document the evaluated GVW
+    evaluated_gvws_df = pd.concat([evaluated_gvws_df, pd.DataFrame({'Battery Energy Density (kWh/ton)': [e_density_battery], 'Max GVW (lb)': [gvw_payload_average]})], ignore_index=True)
+        
+# Save the evaluated GVWs as a pickle file
+with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_battery_energy_density.pkl', 'wb') as f:
+    pickle.dump(evaluated_gvws_df, f)
+###################################################################
+
+
+############ Plot best-fitting GVW vs. combined efficiency ############
+with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_battery_energy_density.pkl', 'rb') as f:
+    evaluated_gvws_df = pickle.load(f)
+
+fig, ax = plt.subplots(figsize=(8, 5))
+ax.set_title(f'{name_title} Event {driving_event}', fontsize=20)
+ax.set_ylabel('GVW best matching NACFE Results (lbs)', fontsize=15)
+ax.set_xlabel('Battery Energy Density (kWh/ton)', fontsize=15)
+ax.tick_params(axis='both', which='major', labelsize=14)
+ax.plot(evaluated_gvws_df['Battery Energy Density (kWh/ton)'], evaluated_gvws_df['Max GVW (lb)'], 'o')
+plt.savefig('plots/matching_gvw_vs_battery_energy_density.png')
+
+###################################################################
+    
+###########################################################################################################
+"""
+
+############# Evaluate best-fitting GVW vs. battery roundtrip efficiency ############
+truck_name = 'pepsi_1'
+name_title = truck_name.replace('_', ' ').capitalize()
+driving_event = 2
+evaluated_gvws_df = pd.DataFrame(columns=['Max GVW (lb)', 'Battery Roundtrip Efficiency'])
+battery_roundtrip_efficiencies = np.linspace(0.9, 1, 10)
+
+for roundtrip_efficiency in battery_roundtrip_efficiencies:
+    
+    print(f'Processing {truck_name} event {driving_event} with roundtrip effiency {roundtrip_efficiency:.2f}')
+        
+    # Read in the NACFE results
+    NACFE_results = get_nacfe_results(truck_name, driving_event)
+    
+    # Update the depth of discharge for the driving event based on the NACFE data
+    update_event_dod(parameters, truck_name, driving_event)
+    
+    # Get the vehicle model results (as a dataframe) as a function of payload
+    vehicle_model_results = get_model_results_vs_payload(truck_name, driving_event, battery_roundtrip_efficiency = roundtrip_efficiency)
+    
+    # Get the payloads and resulting GVW for which the truck model results best match the NACFE data. Also collect the cubic splines used for this evaluation (for the purpose of visualization)
+    payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m = evaluate_matching_payloads(vehicle_model_results)
+    
+    print(f'Evaluated GVW: {gvw_payload_average}')
+    
+    # Visualize the results
+    visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_results, payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m, battery_roundtrip_efficiency = roundtrip_efficiency)
+    
+    # Document the evaluated GVW
+    evaluated_gvws_df = pd.concat([evaluated_gvws_df, pd.DataFrame({'Battery Roundtrip Efficiency': [roundtrip_efficiency], 'Max GVW (lb)': [gvw_payload_average]})], ignore_index=True)
+        
+# Save the evaluated GVWs as a pickle file
+with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_battery_roundtrip_efficiency.pkl', 'wb') as f:
+    pickle.dump(evaluated_gvws_df, f)
+###################################################################
+
+
+############ Plot best-fitting GVW vs. combined efficiency ############
+with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_battery_roundtrip_efficiency.pkl', 'rb') as f:
+    evaluated_gvws_df = pickle.load(f)
+fig, ax = plt.subplots(figsize=(8, 5))
+ax.set_title(f'{name_title} Event {driving_event}', fontsize=20)
+ax.set_ylabel('GVW best matching NACFE Results (lbs)', fontsize=15)
+ax.set_xlabel('Battery Roundtrip Efficiency', fontsize=15)
+ax.tick_params(axis='both', which='major', labelsize=14)
+ax.plot(evaluated_gvws_df['Battery Roundtrip Efficiency'], evaluated_gvws_df['Max GVW (lb)'], 'o')
+plt.savefig('plots/matching_gvw_vs_battery_roundtrip_efficiency.png')
+
+###################################################################
+    
+###########################################################################################################
