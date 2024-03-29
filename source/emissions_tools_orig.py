@@ -20,7 +20,8 @@ def CI_grid_cal(timeline):
   carbon_intensity_calc= mono_exp(timeline,params[0],params[1],params[2])
   return carbon_intensity_calc
 
-#Carbon emissions intensity (g CO2 / kWh) of the US grid over time from various models and policy scenarios, and fitted curve from EIA data
+#Carbon emissions intensity of the US grid over time from various models and policy scenarios, and fitted curve from EIA data
+
 data_CI=[
  {2020:352, 2021: 365, 2025: np.nan,2030: 168, 2035:90, 2040:60, 2045:44, 2050:34}, ##IEA STEPS
  {2020:352, 2021: 365, 2025: np.nan, 2030: 107, 2035: 15, 2040: -3, 2045:-6, 2050:-7}, ##IEA APS
@@ -51,37 +52,11 @@ class emission:
 ##Inputs: GHG battery manufacturing (GHG_bat_unit, g CO2/kWh), number of replacements (replacements), vehicle model results
 ##Output: GHGs emissions (gCO2/mi), Well to Wheel. We did not consider other emissions like PM2.5
 
-  def get_WTW(self, vehicle_model_results, GHG_bat_unit, replacements, scenario='Present', grid_intensity_start=None, start_year=None):
-  
-    # Establish the timeline to consider for exponentially decaying grid carbon intenstiy
-    timeline_start_year = 2020
-    if start_year:
-        timeline_start_year = start_year
-    if scenario == 'Present':
-        timeline = range(start_year, start_year+10)
-    elif scenario == 'Mid term':
-        timeline = range(2030, 2040)
-    elif scenario == 'Long term':
-        timeline = range(2050, 2060)
-            
-    # Emissions are broken down into battery manufacturing and electricity production on the grid
-    GHG_emissions = {}
+  def get_WTW(self, vehicle_model_results, GHG_bat_unit, replacements):
+    GHG_emissions = pd.DataFrame(columns = ['GHGs manufacturing (gCO2/mi)', 'GHGs grid (gCO2/mi)', 'GHGs total (gCO2/mi)'])
+    GHG_emissions['GHGs manufacturing (gCO2/mi)'] = (vehicle_model_results['Payload penalty factor']*(1+ replacements)*vehicle_model_results['Energy battery (kWh)']*GHG_bat_unit)/self.parameters.VMT.sum()
     
-    GHG_emissions['GHGs manufacturing (gCO2/mi)'] = (vehicle_model_results['Payload penalty factor'] * (1 + replacements) * vehicle_model_results['Battery capacity (kWh)'] * GHG_bat_unit) / (self.parameters.VMT['VMT (miles)']).sum()
-
-    # Get the average grid CI over the vehicle life, weighted by VMT
-    VMT_grid_CI_df = self.parameters.VMT.copy()
-    
-    CI_grid_projection = CI_grid_cal(timeline)
-    if grid_intensity_start:
-        CI_grid_projection = CI_grid_projection * grid_intensity_start / CI_grid_projection[0]
-    
-    VMT_grid_CI_df['Grid CI (g CO2 / kWh)'] = CI_grid_projection
-    average_grid_intensity = (VMT_grid_CI_df['VMT (miles)'] * VMT_grid_CI_df['Grid CI (g CO2 / kWh)']).sum() / VMT_grid_CI_df['VMT (miles)'].sum()
-
-    # Multiply by the fuel economy to get the grid emissions per mile (accounting for payload penalty and grid transmission losses)
-    GHG_emissions['GHGs grid (gCO2/mi)'] = vehicle_model_results['Payload penalty factor'] * vehicle_model_results['Fuel economy (kWh/mi)'] * average_grid_intensity
-    
-    GHG_emissions['GHGs total (gCO2/mi)'] = GHG_emissions['GHGs manufacturing (gCO2/mi)'] + GHG_emissions['GHGs grid (gCO2/mi)'] # WTW emissions
-    
+    CI_grid_miles = pd.DataFrame({'CI_grid_miles':[sum(xi * yi for xi, yi in zip(self.parameters.VMT, y)) for y in [CI_grid_cal(range(2020,2030)), CI_grid_cal(range(2030,2040)), CI_grid_cal(range(2050,2060))]]})
+    GHG_emissions['GHGs grid (gCO2/mi)']=vehicle_model_results['Payload penalty factor']*vehicle_model_results['Fuel economy (kWh/mi)']*CI_grid_miles['CI_grid_miles']/(self.parameters.eta_grid_transmission*self.parameters.VMT.sum())
+    GHG_emissions['GHGs total (gCO2/mi)'] =  GHG_emissions['GHGs manufacturing (gCO2/mi)'] + GHG_emissions['GHGs grid (gCO2/mi)'] # WTW emissions
     return GHG_emissions # in gCO2/mi

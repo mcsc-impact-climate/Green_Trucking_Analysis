@@ -17,18 +17,21 @@ from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
 import truck_model_tools
 import costing_tools
 import emissions_tools
+import data_collection_tools
 from datetime import datetime
 
 MONTHS_PER_YEAR = 12
+KG_PER_TON = 1000
+KG_PER_LB = 0.453592
 
 """
 Function: Calculate the monthly charging energy requirements given a truck's annual miles traveled (VMT) and fuel economy
 Inputs:
-    - VMT: Annual miles traveled (miles / year)
-    - fuel_economy: Fuel economy of the truck (kWh / mile)
+    - VMT (float): Annual miles traveled (miles / year)
+    - mileage (float): Fuel economy of the truck (kWh / mile)
 """
-def calculate_charging_energy_per_month(VMT, fuel_economy):
-    battery_energy_per_year = VMT * fuel_economy  # kWh / year
+def calculate_charging_energy_per_month(VMT, mileage):
+    battery_energy_per_year = VMT * mileage  # kWh / year
     return battery_energy_per_year / MONTHS_PER_YEAR    # kWh / month
 
 
@@ -43,14 +46,14 @@ def read_charger_cost_info(filename, scenario='Baseline'):
 """
 Function: Calculate the electricity price per kWh
 Inputs:
-    - VMT: Annual miles traveled (miles / year)
-    - fuel_economy: Fuel economy of the truck (kWh / mile)
-    - demand charge: Monthly charge for peak power used ($/kW)
-    - electricity_charge: Retail electricity price ($/kWh)
-    - charging_power: Average charging power (kW)
-    - charging_efficiency: Efficiency of charging the battery (relative to energy from the power source)
+    - VMT (float): Annual miles traveled (miles / year)
+    - mileage (float): Fuel economy of the truck (kWh / mile)
+    - demand charge (float): Monthly charge for peak power used ($/kW)
+    - electricity_charge (float): Retail electricity price ($/kWh)
+    - charging_power (float): Average charging power (kW)
+    - charging_efficiency (float): Efficiency of charging the battery (relative to energy from the power source)
 """
-def calculate_electricity_price(VMT, fuel_economy, demand_charge, electricity_charge, charging_power, charging_efficiency=0.92, charger_cost_filename='data/charger_cost_data.csv', charger_cost_scenario='Baseline'):
+def calculate_electricity_unit(VMT, mileage, demand_charge, electricity_charge, charging_power, charging_efficiency=0.92, charger_cost_filename='data/charger_cost_data.csv', charger_cost_scenario='Baseline'):
     lifetime = 15       # Truck lifetime
     discount_rate = 7        # Discount rate (%)
     
@@ -58,7 +61,7 @@ def calculate_electricity_price(VMT, fuel_economy, demand_charge, electricity_ch
     installation_cost, hardware_cost, fixed_monthly_cost = read_charger_cost_info(charger_cost_filename, charger_cost_scenario)
     
     # Convert charging energy per month to kWh
-    charging_energy_per_month = calculate_charging_energy_per_month(VMT, fuel_economy)
+    charging_energy_per_month = calculate_charging_energy_per_month(VMT, mileage)
         
     lifetime_energy_sold = (charging_energy_per_month * MONTHS_PER_YEAR * lifetime)
     capital_cost = (hardware_cost + installation_cost) * (1 + discount_rate / 100.)**lifetime
@@ -68,8 +71,140 @@ def calculate_electricity_price(VMT, fuel_economy, demand_charge, electricity_ch
     norm_fixed_monthly = fixed_monthly_cost * MONTHS_PER_YEAR * lifetime / lifetime_energy_sold
     total_charge = norm_cap_cost + (norm_demand_charge + norm_energy_charge + norm_fixed_monthly)
     
-    return np.array([total_charge, norm_cap_cost, norm_fixed_monthly, norm_energy_charge, norm_demand_charge])
+    return total_charge, norm_cap_cost, norm_fixed_monthly, norm_energy_charge, norm_demand_charge
     
-def 
+def calculate_electricity_unit_by_row(row, mileage, demand_charge, electricity_charge, charging_power):
+    total_charge, norm_cap_cost, norm_fixed_monthly, norm_energy_charge, norm_demand_charge = calculate_electricity_unit(
+        VMT = row['VMT (miles)'],
+        mileage = mileage,
+        demand_charge = demand_charge,
+        electricity_charge = electricity_charge,
+        charging_power = charging_power)
+    return pd.Series([total_charge, norm_cap_cost, norm_fixed_monthly, norm_energy_charge, norm_demand_charge])
+        
+    
+"""
+Function: Given an average lifetime VMT, obtains the distribution of VMT over a 7-year period, assuming it follows the shape defined in Burnham, A et al. (2021)
+Inputs:
+    - average_VMT (float): Average annual miles traveled over the truck's lifetime
+"""
+def get_VMT_distribution(average_VMT):
+    nominal_VMT = np.array(pd.read_csv('data/default_vmt.csv')['VMT (miles)'])
+    return average_VMT * nominal_VMT / np.sum(nominal_VMT)
 
-print(calculate_electricity_price(180000, 2, 10, 0.15, 300, charger_cost_scenario='Pessimistic'))
+"""
+Function: Gets the mileage given an input payload
+Inputs:
+    - payload (float): Typical payload that the truck carries, in lb
+    - f_linear_params (string): Path to a csv file containing the best-fit linear fit slope and y-intersect (along with uncertainties) for mileage vs. payload
+"""
+def get_mileage(m_payload, f_linear_params = 'tables/payload_vs_mileage_best_fit_params.csv'):
+    payload_vs_mileage_params_df = pd.read_csv(f_linear_params)
+    slope = payload_vs_mileage_params_df['slope (kWh/lb-mi)'].iloc[0]
+    slope_unc = payload_vs_mileage_params_df['slope unc (kWh/lb-mi)'].iloc[0]
+    b = payload_vs_mileage_params_df['b (kWh/mi)'].iloc[0]
+    b_unc = payload_vs_mileage_params_df['b unc (kWh/mi)'].iloc[0]
+    
+    mileage = slope * m_payload + b
+    mileage_unc = slope_unc * m_payload + b_unc
+    
+    return mileage, mileage_unc
+    
+"""
+Function: Collects the VIUS payload distribution for class 8 semis and scales it to have the given average payload
+Inputs:
+    - payload (float): Desired average payload, in lb
+"""
+def get_payload_distribution(m_payload_lb):
+    nominal_payload_distribution = pd.read_excel('data/payloaddistribution.xlsx')
+    payload_distribution = nominal_payload_distribution.copy()
+    payload_distribution['Payload (lb)'] = m_payload_lb * payload_distribution['Payload (lb)'] / np.mean(payload_distribution['Payload (lb)'])
+    payload_distribution['Payload (kg)'] = payload_distribution['Payload (lb)']*KG_PER_LB #payload distribution in kgs
+    return payload_distribution
+
+"""
+Function: Evaluates the payload penalty, which quantifies the relative increase in number of trucks needed to carry the given payload distribution given the reduced payload incurred by the battery weight.
+Inputs:
+    - payload_distribution (pd.DataFrame): Dataframe containing the payload distribution in both lb and kg
+    - m_bat: Mass of the battery, in kg
+    -
+"""
+def get_payload_penalty(payload_distribution, m_bat_kg, m_truck_no_bat_kg, m_truck_max_kg, alpha=1):
+    payload_max_kg = m_truck_max_kg - m_bat_kg - m_truck_no_bat_kg # payload + trailer
+    payload_distribution['Payload loss (kg)'] = payload_distribution['Payload (kg)'].apply(lambda x: np.maximum(x - payload_max_kg, 0))
+    payload_penalty = 1 + (alpha*payload_distribution['Payload loss (kg)'].mean()) / payload_max_kg
+    return payload_penalty
+
+def main():
+    #print(calculate_electricity_unit(180000, 2, 10, 0.15, 300, charger_cost_scenario='Pessimistic'))
+    #print(np.mean(get_VMT_distribution(100000)))
+    #print(get_mileage(40000))
+    
+    # Read in parameters for the Tesla Semi
+    parameters = data_collection_tools.read_parameters(truck_params = 'semi')
+    
+    # Read in battery parameters
+    battery_params_dict = data_collection_tools.read_battery_params(chemistry='NMC')
+    
+    # Set default values for variable parameters
+    m_payload_lb = 50000                        # lb
+    m_payload_kg = m_payload_lb * KG_PER_LB     # kg
+    demand_charge = 10                          # $/kW
+    electricity_charge = 0.15                   # cents/kW
+    charging_power = 750                        # Max charging power, in kW
+    e_bat = 825                                 # Evaluated battery capacity for the Tesla Semi, in kWh
+    m_truck_max_lb = 82000                      # Maximum weight of EV trucks, in lb
+    m_truck_max_kg = m_truck_max_lb * KG_PER_LB
+    grid_emission_intensity = 200               # Present grid emission intensity
+    grid_emission_intensity_year = 2022         # Year for the present grid emission intensity
+    scenario = 'Present'
+    
+    # Read in data for the chosen scenario
+    scenario_data_present = data_collection_tools.read_scenario_data(scenario=scenario, chemistry='NMC')
+    
+    # Get the mileage and unceratainty for the given payload
+    mileage, mileage_unc = get_mileage(m_payload_lb, f_linear_params = 'tables/payload_vs_mileage_best_fit_params.csv')
+
+    # Calculate the electricity price breakdown for each year
+    electricity_cost_df = parameters.VMT.copy()
+    electricity_cost_df[['total_charge', 'norm_cap_cost', 'norm_fixed_monthly', 'norm_energy_charge', 'norm_demand_charge']] = electricity_cost_df.apply(calculate_electricity_unit_by_row, axis=1, mileage=mileage, demand_charge=demand_charge, electricity_charge=electricity_charge, charging_power=charging_power)
+    
+    # Calculate the masses of the battery and truck, given the input battery capacity and energy density
+    e_density = scenario_data_present['Energy Density (kWh/ton)']
+    m_bat_kg = e_bat / e_density * KG_PER_TON          # Battery mass, in kg
+    m_bat_lb = m_bat_kg / KG_PER_LB
+    m_truck_no_bat_kg = parameters.m_truck_no_bat
+    m_truck_no_bat_lb = m_truck_no_bat_kg / KG_PER_LB
+    m_truck_lb = m_bat_lb + m_truck_no_bat_lb + m_payload_lb
+    
+    # Scale the VIUS payload distribution to one with the same shape whose average is the given payload
+    payload_distribution = get_payload_distribution(m_payload_lb)
+    
+    # Calculate the payload penalty factor
+    payload_penalty_factor = get_payload_penalty(payload_distribution, m_bat_kg, parameters.m_truck_no_bat, m_truck_max_kg)
+    
+    # Collect the vehicle model results into a dataframe
+    #columns = ['Battery capacity (kWh)', 'Battery mass (lbs)', 'Fuel economy (kWh/mi)', 'Payload penalty factor', 'Total vehicle mass (lbs)']
+    
+    vehicle_model_results_dict = {
+        'Battery capacity (kWh)': e_bat,
+        'Battery mass (lbs)': m_bat_lb,
+        'Fuel economy (kWh/mi)': mileage,
+        'Payload penalty factor': payload_penalty_factor,
+        'Total vehicle mass (lbs)': m_truck_lb
+    }
+    
+    #vehicle_model_results = pd.DataFrame([vehicle_model_results_dict])
+    
+    # Calculate GHG emissions per mile
+    # ToDo: implement a function to calculate the number of replacements given the VMT distribution
+    GHG_emissions = emissions_tools.emission(parameters).get_WTW(vehicle_model_results_dict, battery_params_dict['Manufacturing emissions (CO2/kWh)'],  battery_params_dict['Replacements'], grid_intensity_start=grid_emission_intensity, start_year=grid_emission_intensity_year)
+    
+    # Calculate cost per mile
+    
+    
+    
+    
+    
+if __name__ == '__main__':
+    main()

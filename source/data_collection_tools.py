@@ -28,7 +28,7 @@ def read_battery_params(battery_params='default', chemistry='NMC'):
     
     return battery_params_dict
     
-def get_scenario_data(scenario='Present', chemistry='NMC'):
+def read_scenario_data(scenario='Present', chemistry='NMC'):
     df_scenarios = pd.read_csv('data/scenario_data.csv', index_col=0)
     scenario_data_dict = {}
     scenario_data_dict['Energy Density (kWh/ton)'] = float(df_scenarios['NMC battery energy density'].loc[scenario])
@@ -36,3 +36,5 @@ def get_scenario_data(scenario='Present', chemistry='NMC'):
     scenario_data_dict['Capital Costs ($/kW)'] = pd.DataFrame({'glider ($)': [float(df_scenarios['Cost of glider'].iloc[0])], 'motor and inverter ($/kW)': [float(df_scenarios['Cost of motor and inverter'].iloc[0])], 'DC-DC converter ($/kW)': [float(df_scenarios['Cost of DC-DC converter'].iloc[0])]})
 
     scenario_data_dict['Operating Costs ($/mi)'] = pd.DataFrame({'maintenance & repair ($/mi)': [float(df_scenarios['Maintenance and repair cost'].iloc[0])], 'labor ($/mi)': [float(df_scenarios['Labor cost'].iloc[0])], 'insurance ($/mi)': [float(df_scenarios['Insurance cost'].iloc[0])], 'misc ($/mi)': [float(df_scenarios[' Miscellaneous costs'].iloc[0])]})
+    
+    return scenario_data_dict

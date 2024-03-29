@@ -13,7 +13,7 @@ class read_parameters:
     df_truck_params = pd.read_csv(f_truck_params, index_col=0)
     df_economy_params = pd.read_csv(f_economy_params, index_col=0)
     df_constants = pd.read_csv(f_constants, index_col=0)
-    self.VMT = np.array(pd.read_csv(f_vmt)['VMT (miles)'])
+    self.VMT = pd.read_csv(f_vmt, usecols=['Year', 'VMT (miles)'])
       
     # Weights and payloads
     self.m_ave_payload = float(df_truck_params['Value'].loc['Average payload'])
