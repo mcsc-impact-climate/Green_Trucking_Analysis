@@ -1,0 +1,6 @@
+Scenario,Installation cost,Hardware cost,Fixed monthly cost
+Baseline,33179,87500,60
+Optimistic,18577,75000,20
+Pessimistic,47781,100000,100
+Units,$,$,$/month
+Source,Nicholas M. et al  (check specific publication with Kariana & Sayandeep),Nicholas M. et al (check specific publication with Kariana & Sayandeep),
