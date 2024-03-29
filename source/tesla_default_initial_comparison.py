@@ -28,7 +28,7 @@ import numpy as np
 import scipy as scipy
 import matplotlib.pyplot as plt
 import truck_model_tools
-import costing_tools
+import costing_tools_orig
 import emissions_tools_orig
 
 new_rc_params = {'text.usetex': False,

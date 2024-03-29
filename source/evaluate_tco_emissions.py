@@ -34,7 +34,12 @@ def calculate_charging_energy_per_month(VMT, mileage):
     battery_energy_per_year = VMT * mileage  # kWh / year
     return battery_energy_per_year / MONTHS_PER_YEAR    # kWh / month
 
-
+"""
+Function: Reads in cost info for chargers for a given scenario
+Inputs:
+    - filename (string): Path to the csv file containing the charger cost info
+    - scenario (string): Name of the scenario to consider in the csv file
+"""
 def read_charger_cost_info(filename, scenario='Baseline'):
     charger_cost_df = pd.read_csv(filename, index_col='Scenario')
     installation_cost = float(charger_cost_df['Installation cost'].loc[scenario])
@@ -126,8 +131,10 @@ def get_payload_distribution(m_payload_lb):
 Function: Evaluates the payload penalty, which quantifies the relative increase in number of trucks needed to carry the given payload distribution given the reduced payload incurred by the battery weight.
 Inputs:
     - payload_distribution (pd.DataFrame): Dataframe containing the payload distribution in both lb and kg
-    - m_bat: Mass of the battery, in kg
-    -
+    - m_bat_kg (float): Mass of the battery, in kg
+    - m_truck_no_bat_kg (float): Mass of the truck without payload or battery, in kg
+    - m_truck_max_kg (float): Maximum GVW of the truck, including payload and battery, in kg
+    - alpha (float): Used for payload penalty factor calculations (alpha = 1 for base case, alpha = 2: complete dependency in payload measurements)
 """
 def get_payload_penalty(payload_distribution, m_bat_kg, m_truck_no_bat_kg, m_truck_max_kg, alpha=1):
     payload_max_kg = m_truck_max_kg - m_bat_kg - m_truck_no_bat_kg # payload + trailer
@@ -135,42 +142,44 @@ def get_payload_penalty(payload_distribution, m_bat_kg, m_truck_no_bat_kg, m_tru
     payload_penalty = 1 + (alpha*payload_distribution['Payload loss (kg)'].mean()) / payload_max_kg
     return payload_penalty
 
-def main():
-    #print(calculate_electricity_unit(180000, 2, 10, 0.15, 300, charger_cost_scenario='Pessimistic'))
-    #print(np.mean(get_VMT_distribution(100000)))
-    #print(get_mileage(40000))
+"""
+Function: Evaluates the total electricity cost for each year given the varying VMT
+Inputs:
+    - parameters (read_parameters class instance): Instance of the read_parameters class defined in truck_model_tools, containing truck parameters
+    - mileage (float): Fuel economy of the truck (kWh / mile)
+    - demand charge (float): Monthly charge for peak power used ($/kW)
+    - electricity_charge (float): Retail electricity price ($/kWh)
+    - charging_power (float): Average charging power (kW)
+"""
+def get_electricity_cost_by_year(parameters, mileage, demand_charge, electricity_charge, charging_power):
+    electricity_cost_df = parameters.VMT.copy()
+    electricity_cost_df[['Total', 'Normalized capital', 'Normalized fixed', 'Normalized energy charge', 'Normalized demand charge']] = electricity_cost_df.apply(calculate_electricity_unit_by_row, axis=1, mileage=mileage, demand_charge=demand_charge, electricity_charge=electricity_charge, charging_power=charging_power)     # $/kWh
+    return electricity_cost_df
     
-    # Read in parameters for the Tesla Semi
-    parameters = data_collection_tools.read_parameters(truck_params = 'semi')
-    
-    # Read in battery parameters
-    battery_params_dict = data_collection_tools.read_battery_params(chemistry='NMC')
-    
-    # Set default values for variable parameters
-    m_payload_lb = 50000                        # lb
-    m_payload_kg = m_payload_lb * KG_PER_LB     # kg
-    demand_charge = 10                          # $/kW
-    electricity_charge = 0.15                   # cents/kW
-    charging_power = 750                        # Max charging power, in kW
-    e_bat = 825                                 # Evaluated battery capacity for the Tesla Semi, in kWh
-    m_truck_max_lb = 82000                      # Maximum weight of EV trucks, in lb
-    m_truck_max_kg = m_truck_max_lb * KG_PER_LB
-    grid_emission_intensity = 200               # Present grid emission intensity
-    grid_emission_intensity_year = 2022         # Year for the present grid emission intensity
-    scenario = 'Present'
+"""
+Function: Reads in and evaluates specs and performance parameters for the truck
+Inputs:
+    - m_payload_lb (float):
+    - truck_type (string)
+    - battery_chemistry (string)
+    - e_bat (float)
+    - m_truck_max_lb (float)
+    - scenario (string)
+"""
+def get_vehicle_model_results(m_payload_lb, truck_type='semi', battery_chemistry='NMC', e_bat=825, m_truck_max_lb=82000, scenario='Present'):
+
+    # Read in parameters for the given truck type
+    parameters = data_collection_tools.read_parameters(truck_params = truck_type)
     
     # Read in data for the chosen scenario
-    scenario_data_present = data_collection_tools.read_scenario_data(scenario=scenario, chemistry='NMC')
-    
-    # Get the mileage and unceratainty for the given payload
-    mileage, mileage_unc = get_mileage(m_payload_lb, f_linear_params = 'tables/payload_vs_mileage_best_fit_params.csv')
+    scenario_data = data_collection_tools.read_scenario_data(scenario=scenario, chemistry=battery_chemistry)
 
-    # Calculate the electricity price breakdown for each year
-    electricity_cost_df = parameters.VMT.copy()
-    electricity_cost_df[['total_charge', 'norm_cap_cost', 'norm_fixed_monthly', 'norm_energy_charge', 'norm_demand_charge']] = electricity_cost_df.apply(calculate_electricity_unit_by_row, axis=1, mileage=mileage, demand_charge=demand_charge, electricity_charge=electricity_charge, charging_power=charging_power)
+    # Get the mileage and uncertainty for the given payload
+    mileage, mileage_unc = get_mileage(m_payload_lb, f_linear_params = 'tables/payload_vs_mileage_best_fit_params.csv')
     
     # Calculate the masses of the battery and truck, given the input battery capacity and energy density
-    e_density = scenario_data_present['Energy Density (kWh/ton)']
+    e_density = scenario_data['Energy Density (kWh/ton)']
+    m_truck_max_kg = m_truck_max_lb * KG_PER_LB
     m_bat_kg = e_bat / e_density * KG_PER_TON          # Battery mass, in kg
     m_bat_lb = m_bat_kg / KG_PER_LB
     m_truck_no_bat_kg = parameters.m_truck_no_bat
@@ -183,9 +192,6 @@ def main():
     # Calculate the payload penalty factor
     payload_penalty_factor = get_payload_penalty(payload_distribution, m_bat_kg, parameters.m_truck_no_bat, m_truck_max_kg)
     
-    # Collect the vehicle model results into a dataframe
-    #columns = ['Battery capacity (kWh)', 'Battery mass (lbs)', 'Fuel economy (kWh/mi)', 'Payload penalty factor', 'Total vehicle mass (lbs)']
-    
     vehicle_model_results_dict = {
         'Battery capacity (kWh)': e_bat,
         'Battery mass (lbs)': m_bat_lb,
@@ -194,17 +200,68 @@ def main():
         'Total vehicle mass (lbs)': m_truck_lb
     }
     
-    #vehicle_model_results = pd.DataFrame([vehicle_model_results_dict])
+    return parameters, vehicle_model_results_dict
+    
+def evaluate_emissions(m_payload_lb, grid_emission_intensity, grid_emission_intensity_year=2022, e_bat=825, battery_chemistry='NMC', m_truck_max_lb=82000, scenario='Present'):
+    
+    # Evaluate parameters and vehicle model results for the given payload
+    parameters, vehicle_model_results_dict = get_vehicle_model_results(m_payload_lb)
+    
+    # Read in data for the chosen scenario
+    scenario_data = data_collection_tools.read_scenario_data(scenario=scenario, chemistry=battery_chemistry)
+    
+    # Read in battery parameters
+    battery_params_dict = data_collection_tools.read_battery_params(chemistry=battery_chemistry)
     
     # Calculate GHG emissions per mile
     # ToDo: implement a function to calculate the number of replacements given the VMT distribution
     GHG_emissions = emissions_tools.emission(parameters).get_WTW(vehicle_model_results_dict, battery_params_dict['Manufacturing emissions (CO2/kWh)'],  battery_params_dict['Replacements'], grid_intensity_start=grid_emission_intensity, start_year=grid_emission_intensity_year)
     
-    # Calculate cost per mile
+    return GHG_emissions
     
+def evaluate_costs(m_payload_lb, electricity_charge, demand_charge, charging_power=750, e_bat=825, battery_chemistry='NMC', m_truck_max_lb=82000, vehicle_purchase_price=250000, scenario='Present'):
     
+    # Evaluate parameters and vehicle model results for the given payload
+    parameters, vehicle_model_results_dict = get_vehicle_model_results(m_payload_lb)
     
+    # Read in data for the chosen scenario
+    scenario_data = data_collection_tools.read_scenario_data(scenario=scenario, chemistry=battery_chemistry)
     
+    # Read in battery parameters
+    battery_params_dict = data_collection_tools.read_battery_params(chemistry=battery_chemistry)
+    
+    # Calculate the electricity price breakdown for each year
+    electricity_cost_df = get_electricity_cost_by_year(parameters, vehicle_model_results_dict['Fuel economy (kWh/mi)'], demand_charge, electricity_charge, charging_power)
+
+    # Calculate TCO per mile
+    # ToDo: implement a function to calculate the number of replacements given the VMT distribution
+    TCO = costing_tools.cost(parameters).get_TCO(vehicle_model_results_dict, scenario_data['Capital Costs ($/kW)'], scenario_data['Battery Unit Cost ($/kWh)'], scenario_data['Operating Costs ($/mi)'], electricity_cost_df['Total'], battery_params_dict['Replacements'], vehicle_purchase_price = vehicle_purchase_price)
+    
+    return TCO
+
+    
+def main():
+    # Set default values for variable parameters
+    m_payload_lb = 50000                        # lb
+    m_payload_kg = m_payload_lb * KG_PER_LB     # kg
+    demand_charge = 10                          # $/kW
+    electricity_charge = 0.15                   # cents/kW
+    charging_power = 750                        # Max charging power, in kW
+    e_bat = 825                                 # Evaluated battery capacity for the Tesla Semi, in kWh
+    m_truck_max_lb = 82000                      # Maximum weight of EV trucks, in lb
+    m_truck_max_kg = m_truck_max_lb * KG_PER_LB
+    grid_emission_intensity = 200               # Present grid emission intensity
+    grid_emission_intensity_year = 2022         # Year for the present grid emission intensity
+    scenario = 'Present'
+    vehicle_purchase_price = 250000             # Purchase price for the Tesla semi, based on reports that PepsiCo purchased 18 semis with $4.5 million in grants (https://www.sacbee.com/news/business/article274186280.html)
+    
+    get_emissions_and_tco(m_payload_lb, demand_charge, electricity_charge, grid_emission_intensity)
+    
+    emissions = evaluate_emissions(m_payload_lb, grid_emission_intensity)
+    costs = evaluate_costs(m_payload_lb, electricity_charge, demand_charge)
+    
+    print(emissions)
+    print(costs)
     
 if __name__ == '__main__':
     main()
