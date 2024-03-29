@@ -133,7 +133,7 @@ def update_event_dod(parameters, truck_name, driving_event):
 
 
 # Function to get truck model results over a range of payload sizes
-def get_model_results_vs_payload(truck_name, driving_event, payload_min=0, payload_max=70000, n_payloads=10, e_density_battery = e_present_density_NMC, battery_roundtrip_efficiency = eta_battery_NMC):
+def get_model_results_vs_payload(truck_name, driving_event, payload_min=0, payload_max=80000, n_payloads=10, e_density_battery = e_present_density_NMC, battery_roundtrip_efficiency = eta_battery_NMC):
 
     # Collect the drivecycle
     df_drivecycle = truck_model_tools.extract_drivecycle_data(f'data/{truck_name}_drive_cycle_{driving_event}.csv')
@@ -152,13 +152,14 @@ def get_model_results_vs_payload(truck_name, driving_event, payload_min=0, paylo
     return vehicle_model_results
     
 # Function to evaluate the payload and GVW for which the fuel economy and battery capacity best match the values extrapolated from the NACFE data
-def evaluate_matching_payloads(vehicle_model_results, payload_min=0, payload_max=70000):
+def evaluate_matching_payloads(vehicle_model_results, payload_min=0, payload_max=80000):
     cs_e_bat = interp1d(vehicle_model_results['Average Payload (lb)'], vehicle_model_results['Battery capacity (kWh)'])
     cs_mileage = interp1d(vehicle_model_results['Average Payload (lb)'], vehicle_model_results['Fuel economy (kWh/mi)'])
     cs_m = interp1d(vehicle_model_results['Average Payload (lb)'], vehicle_model_results['Total vehicle mass (lbs)'])
 
     def root_func(x, cs, y_target):
         return cs(x) - y_target
+        
     
     payload_e_bat = root_scalar(lambda x: root_func(x, cs_e_bat, NACFE_results['Battery capacity (kWh)']), bracket=[payload_min, payload_max]).root
     payload_mileage = root_scalar(lambda x: root_func(x, cs_mileage, NACFE_results['Fuel economy (kWh/mi)']), bracket=[payload_min, payload_max]).root
@@ -169,7 +170,7 @@ def evaluate_matching_payloads(vehicle_model_results, payload_min=0, payload_max
     return payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m
 
 # Function to visualize fit results
-def visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_results, payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m, combined_eff=None, max_power=None, battery_energy_density=None, battery_roundtrip_efficiency=None):
+def visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_results, payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m, combined_eff=None, max_power=None, battery_energy_density=None, battery_roundtrip_efficiency=None, resistance_coef=None):
     fig, axs = plt.subplots(3, 1, figsize=(14, 10), gridspec_kw={'height_ratios': [1, 1, 1]})  # 3 rows, 1 column
     name_title = truck_name.replace('_', ' ').capitalize()
     if not combined_eff is None:
@@ -180,6 +181,8 @@ def visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_re
         axs[0].set_title(f'{name_title}: Payload Estimation for Driving Event {driving_event} (Battery Energy Density: {battery_energy_density:.0f} kWh/ton)', fontsize=20)
     elif not battery_roundtrip_efficiency is None:
         axs[0].set_title(f'{name_title}: Payload Estimation for Driving Event {driving_event} (Battery Roundtrip Efficiency: {battery_roundtrip_efficiency:.2f})', fontsize=20)
+    elif not resistance_coef is None:
+        axs[0].set_title(f'{name_title}: Payload Estimation for Driving Event {driving_event} (Rolling Resistance: {resistance_coef:.4f})', fontsize=20)
     else:
         axs[0].set_title(f'{name_title}: Payload Estimation for Driving Event {driving_event}', fontsize=20)
     axs[0].tick_params(axis='both', which='major', labelsize=14)
@@ -236,6 +239,9 @@ def visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_re
     elif not battery_roundtrip_efficiency is None:
         battery_roundtrip_efficiency_save = str(int(battery_roundtrip_efficiency))
         plt.savefig(f'plots/truck_model_results_vs_payload_{truck_name}_drivecycle_{driving_event}_battery_roundtrip_efficiency_{battery_roundtrip_efficiency_save}.png')
+    elif not resistance_coef is None:
+        resistance_coef_save = str(int(resistance_coef))
+        plt.savefig(f'plots/truck_model_results_vs_payload_{truck_name}_drivecycle_{driving_event}_battery_resistance_coef_{resistance_coef}.png')
     else:
         plt.savefig(f'plots/truck_model_results_vs_payload_{truck_name}_drivecycle_{driving_event}.png')
     plt.close()
@@ -489,6 +495,7 @@ plt.savefig('plots/matching_gvw_vs_battery_energy_density.png')
 ###########################################################################################################
 """
 
+"""
 ############# Evaluate best-fitting GVW vs. battery roundtrip efficiency ############
 truck_name = 'pepsi_1'
 name_title = truck_name.replace('_', ' ').capitalize()
@@ -536,6 +543,65 @@ ax.set_xlabel('Battery Roundtrip Efficiency', fontsize=15)
 ax.tick_params(axis='both', which='major', labelsize=14)
 ax.plot(evaluated_gvws_df['Battery Roundtrip Efficiency'], evaluated_gvws_df['Max GVW (lb)'], 'o')
 plt.savefig('plots/matching_gvw_vs_battery_roundtrip_efficiency.png')
+
+###################################################################
+    
+###########################################################################################################
+"""
+
+############# Evaluate best-fitting GVW vs. battery roundtrip efficiency ############
+truck_name = 'pepsi_1'
+name_title = truck_name.replace('_', ' ').capitalize()
+driving_event = 2
+evaluated_gvws_df = pd.DataFrame(columns=['Max GVW (lb)', 'Resistance Coefficient'])
+resistance_coefs = np.linspace(0.004, 0.008, 10)
+parameters.m_max = 100000
+"""
+for resistance_coef in resistance_coefs:
+    
+    print(f'Processing {truck_name} event {driving_event} with resistance coef {resistance_coef:.4f}')
+    parameters.cr = resistance_coef
+        
+    # Read in the NACFE results
+    NACFE_results = get_nacfe_results(truck_name, driving_event)
+    
+    # Update the depth of discharge for the driving event based on the NACFE data
+    update_event_dod(parameters, truck_name, driving_event)
+    
+    # Get the vehicle model results (as a dataframe) as a function of payload
+    
+    vehicle_model_results = get_model_results_vs_payload(truck_name, driving_event)
+    
+    # Get the payloads and resulting GVW for which the truck model results best match the NACFE data. Also collect the cubic splines used for this evaluation (for the purpose of visualization)
+    payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m = evaluate_matching_payloads(vehicle_model_results)
+    
+    print(f'Evaluated GVW: {gvw_payload_average}')
+    
+    # Visualize the results
+    visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_results, payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m, resistance_coef = resistance_coef)
+    
+    # Document the evaluated GVW
+    evaluated_gvws_df = pd.concat([evaluated_gvws_df, pd.DataFrame({'Resistance Coefficient': [resistance_coef], 'Max GVW (lb)': [gvw_payload_average]})], ignore_index=True)
+        
+# Save the evaluated GVWs as a pickle file
+with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_resistance_coef.pkl', 'wb') as f:
+    pickle.dump(evaluated_gvws_df, f)
+###################################################################
+"""
+
+############ Plot best-fitting GVW vs. combined efficiency ############
+with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_resistance_coef.pkl', 'rb') as f:
+    evaluated_gvws_df = pickle.load(f)
+fig, ax = plt.subplots(figsize=(9, 5))
+ax.set_title(f'{name_title} Event {driving_event}', fontsize=20)
+ax.set_ylabel('GVW best matching NACFE Results (lbs)', fontsize=15)
+ax.set_xlabel('Rolling Resistance Coefficient', fontsize=15)
+ax.axvline(0.0044, ls='--', color='red', label='Best value in literature')
+ax.tick_params(axis='both', which='major', labelsize=14)
+ax.plot(evaluated_gvws_df['Resistance Coefficient'], evaluated_gvws_df['Max GVW (lb)'], 'o')
+ax.legend(fontsize=16)
+plt.tight_layout()
+plt.savefig('plots/matching_gvw_vs_resistance_coef.png')
 
 ###################################################################
     
