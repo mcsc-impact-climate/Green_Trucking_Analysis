@@ -36,22 +36,6 @@ drivecycles = {
 ###########################################################################################################
 
 ######################################### Obtain model parameters #########################################
-# Annual VMT from VIUS 2002
-VMT = np.array(pd.read_csv('data/default_vmt.csv')['VMT (miles)'])
-
-# Default drivecycle used for emission and costing analysis
-# Source: Jones, R et al. (2023).Developing and Benchmarking a US Long-haul Drive Cycle forVehicle Simulations, Costing and Emissions Analysis
-# https://docs.google.com/spreadsheets/d/1Q2uO-JHfwvGxir_PU8IO5zmo0vs4ooC_/edit?usp=sharing&ouid=102742490305620802920&rtpof=true&sd=true
-df_drivecycle = truck_model_tools.extract_drivecycle_data('data/drivecycle.xlsx') #drive cycle as a dataframe
-df_drivecycle_flat = truck_model_tools.extract_drivecycle_data('data/drivecycle_nograde.xlsx') #drive cycle with zero road grade everywhere
-#print(df_drivecycle.head())
-
-# Payload distribution from VIUS 2002
-# Note: Dataset from VIUS 2002, filtered and cleaned by authors for this analysis. Source: 2002 Economic Census: Vehicle Inventory and Use Survey
-# https://docs.google.com/spreadsheets/d/1Oe_jBIUb-kJ5yy9vkwaPgldVe4cloAtG/edit?usp=sharing&ouid=102742490305620802920&rtpof=true&sd=true
-df_payload_distribution = pd.read_excel('data/payloaddistribution.xlsx')
-df_payload_distribution['Payload (kg)'] = df_payload_distribution['Payload (lb)']*KG_PER_LB #payload distribution in kgs
-
 # Read in default truck model parameters
 parameters = truck_model_tools.read_parameters('data/default_truck_params.csv', 'data/default_economy_params.csv', 'data/constants.csv', 'data/default_vmt.csv')
 
@@ -59,30 +43,8 @@ parameters = truck_model_tools.read_parameters('data/default_truck_params.csv', 
 df_battery_data = pd.read_csv('data/default_battery_params.csv', index_col=0)
 
 # Read in present NMC battery parameters
-df_scenarios = pd.read_csv('data/scenario_data.csv', index_col=0)
-e_present_density_NMC = float(df_scenarios['NMC battery energy density'].iloc[0])
-eta_battery_NMC = 0.95      # https://www.statista.com/statistics/1423012/efficiency-of-battery-energy-systems/
-alpha = 1 #for payload penalty factor calculations (alpha = 1 for base case, alpha = 2: complete dependency in payload measurements)
-
-# Read in GHG emissions parameters
-GHG_bat_unit_NMC = df_battery_data['Value'].loc['NMC manufacturing emissions'] #g CO2/kWh
-replacements_NMC = df_battery_data['Value'].loc['NMC replacements']
-
-# Read in costing parameters for present day scenario
-
-# Motor and inverter cost is given per unit of drivetrain power rating (Motor peak power)
-# DC-DC converter cost is given per unit of auxiliary power rating  (Auxiliary loads)
-# Insurance cost is per unit of capital cost of a single BET (no payload penalty included). We computed from reported insurance cost (0.1969 $/mi) for a BET vehicle cost (0.9933 $/mi). Source: https://publications.anl.gov/anlpubs/2021/05/167399.pdf
-# Glider cost from Jones, R et al. (2023). Developing and Benchmarking a US Long-haul Drive Cycle forVehicle Simulations, Costing and Emissions Analysis
-capital_cost_unit = pd.DataFrame({'glider ($)': [float(df_scenarios['Cost of glider'].iloc[0])], 'motor and inverter ($/kW)': [float(df_scenarios['Cost of motor and inverter'].iloc[0])], 'DC-DC converter ($/kW)': [float(df_scenarios['Cost of DC-DC converter'].iloc[0])]})
-
-operating_cost_unit = pd.DataFrame({'maintenance & repair ($/mi)': [float(df_scenarios['Maintenance and repair cost'].iloc[0])], 'labor ($/mi)': [float(df_scenarios['Labor cost'].iloc[0])], 'insurance ($/mi)': [float(df_scenarios['Insurance cost'].iloc[0])], 'misc ($/mi)': [float(df_scenarios[' Miscellaneous costs'].iloc[0])]})
-
-electricity_unit = [float(df_scenarios['Electricity price'].iloc[0])]
-
-SCC = [float(df_scenarios['Social cost of carbon'].iloc[0])] #social cost of carbon in $/ton CO2. Source: https://www.whitehouse.gov/wp-content/uploads/2021/02/TechnicalSupportDocument_SocialCostofCarbonMethaneNitrousOxide.pdf
-
-battery_unit_cost_NMC = [float(df_scenarios['NMC battery unit cost'].iloc[0])] #NMC unit cost in $/kWh
+e_present_density_NMC = df_battery_data['Value'].loc['NMC battery energy density']
+eta_battery_NMC = df_battery_data['Value'].loc['NMC roundtrip efficiency']   # https://www.statista.com/statistics/1423012/efficiency-of-battery-energy-systems/
 ###########################################################################################################
 
 ############################# Evaluate model parameters for Tesla drivecycles #############################
@@ -90,6 +52,8 @@ battery_unit_cost_NMC = [float(df_scenarios['NMC battery unit cost'].iloc[0])] #
 parameters.cd = 0.22   # Source: https://eightify.app/summary/technology-and-innovation/elon-musk-unveils-tesla-semi-impressive-aerodynamic-design-long-range-efficient-charging
 parameters.a_cabin = 10.7  # Source: https://www.motormatchup.com/catalog/Tesla/Semi-Truck/2022/Empty
 parameters.p_motor_max = 942900   # Source: https://www.motormatchup.com/catalog/Tesla/Semi-Truck/2022/Empty
+parameters.cr = 0.0044
+parameters.m_max = 120000
 
 # Function to get NACFE results for the given truck and driving event
 def get_nacfe_results(truck_name, driving_event):
@@ -117,7 +81,7 @@ def update_event_dod(parameters, truck_name, driving_event):
     parameters.DoD = drivecycle_data_df['Depth of Discharge (%)'].loc[driving_event]/100.
 
 # Function to get truck model results over a range of payload sizes
-def get_model_results_vs_payload(truck_name, driving_event, payload_min=0, payload_max=70000, n_payloads=10):
+def get_model_results_vs_payload(truck_name, driving_event, payload_min=0, payload_max=100000, n_payloads=10):
 
     # Collect the drivecycle
     df_drivecycle = truck_model_tools.extract_drivecycle_data(f'data/{truck_name}_drive_cycle_{driving_event}.csv')
@@ -135,8 +99,8 @@ def get_model_results_vs_payload(truck_name, driving_event, payload_min=0, paylo
         vehicle_model_results = pd.concat([vehicle_model_results, new_row], ignore_index=True)
     return vehicle_model_results
     
-# Function to evaluate the payload and GVW for which the fuel economy and battery capacity best match the values extrapolated from the NACFE data
-def evaluate_matching_payloads(vehicle_model_results, NACFE_results, payload_min=0, payload_max=70000):
+# Function to evaluate the payload and GVW for which the fuel economy and battery capacity best match the values evaluated from the NACFE data
+def evaluate_matching_payloads(vehicle_model_results, NACFE_results, payload_min=0, payload_max=100000):
     cs_e_bat = interp1d(vehicle_model_results['Average Payload (lb)'], vehicle_model_results['Battery capacity (kWh)'])
     cs_mileage = interp1d(vehicle_model_results['Average Payload (lb)'], vehicle_model_results['Fuel economy (kWh/mi)'])
     cs_m = interp1d(vehicle_model_results['Average Payload (lb)'], vehicle_model_results['Total vehicle mass (lbs)'])
@@ -300,7 +264,6 @@ driving_events = {
     'pepsi_2': [7, 10, 14, 22, 25, 31],
     'pepsi_3': [8, 10, 13, 16, 21, 24, 28, 32, 33]
 }
-combined_effs = np.linspace(0.83, 1., 10)
 
 def evaluate_matching_gvw(truck_name, driving_event, combined_eff):
     parameters.eta_i = 1.
@@ -371,7 +334,7 @@ def main():
             startTime = datetime.now()
             print(f'Processing {truck_name} event {driving_event}')
             
-            combined_effs = np.linspace(0.83, 1., 10)
+            combined_effs = np.linspace(0.829, 1., 10)
             # Prepare a list of tuples where each tuple contains all arguments for a single call to parallel_evaluate_matching_gvw
             args_list = [(truck_name, driving_event, combined_eff) for combined_eff in combined_effs]
 
