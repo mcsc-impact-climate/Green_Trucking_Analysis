@@ -20,12 +20,16 @@ class cost:
     else:
         capital = capital_cost_unit['glider ($)'] + \
               (capital_cost_unit['motor and inverter ($/kW)'] * self.parameters.p_motor_max / 1000.) +  \
-              (capital_cost_unit['DC-DC converter ($/kW)'] * self.parameters.p_aux / 1000.) + \
-              ((1+(replacements*discountfactor[5])) * (battery_unit_cost * vehicle_model_results['Battery capacity (kWh)']))
+              (capital_cost_unit['DC-DC converter ($/kW)'] * self.parameters.p_aux / 1000.)
+    
+    # Cost to replace the battery
+    battery_replacement_cost = replacements * discountfactor[5] * battery_unit_cost * vehicle_model_results['Battery capacity (kWh)']
+    capital = capital + battery_replacement_cost
+    
     total_CAPEX = vehicle_model_results['Payload penalty factor'] * capital / self.parameters.VMT['VMT (miles)'].sum()
     return total_CAPEX #in $ per mile
 
-  def get_operating(self, vehicle_model_results, replacements, operating_cost_unit, electricity_unit_by_year, total_CAPEX,discountfactor):
+  def get_operating(self, vehicle_model_results, operating_cost_unit, electricity_unit_by_year, total_CAPEX,discountfactor):
   
     # Calculate the average discounted electricity rate over the 10-year lifetime of the vehicle
     average_discounted_electricity_rate = np.sum(self.parameters.VMT['VMT (miles)'] * electricity_unit_by_year * discountfactor) / self.parameters.VMT['VMT (miles)'].sum()
@@ -57,7 +61,7 @@ class cost:
     discountfactor = 1 / np.power(1 + self.parameters.discountrate, np.arange(10)) #life time of trucks is 10 years
     costs_total['Total capital ($/mi)'] = cost(self.parameters).get_capital(vehicle_model_results, replacements, capital_cost_unit, battery_unit_cost, discountfactor, vehicle_purchase_price)
     
-    costs_total['Total operating ($/mi)'], costs_total['Total electricity ($/mi)'], costs_total['Total labor ($/mi)'], costs_total['Other OPEXs ($/mi)']= cost(self.parameters).get_operating(vehicle_model_results, replacements, operating_cost_unit, electricity_unit_by_year, costs_total['Total capital ($/mi)'],discountfactor)
+    costs_total['Total operating ($/mi)'], costs_total['Total electricity ($/mi)'], costs_total['Total labor ($/mi)'], costs_total['Other OPEXs ($/mi)'] = cost(self.parameters).get_operating(vehicle_model_results, operating_cost_unit, electricity_unit_by_year, costs_total['Total capital ($/mi)'], discountfactor)
     
     costs_total['TCO ($/mi)'] = costs_total['Total capital ($/mi)'] + costs_total[ 'Total operating ($/mi)']
     

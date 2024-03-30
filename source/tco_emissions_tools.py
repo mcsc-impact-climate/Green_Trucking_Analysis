@@ -93,9 +93,8 @@ Function: Given an average lifetime VMT, obtains the distribution of VMT over a 
 Inputs:
     - average_VMT (float): Average annual miles traveled over the truck's lifetime
 """
-def get_VMT_distribution(average_VMT):
-    nominal_VMT = np.array(pd.read_csv('data/default_vmt.csv')['VMT (miles)'])
-    return average_VMT * nominal_VMT / np.sum(nominal_VMT)
+def get_VMT_distribution(nominal_VMT, average_VMT):
+    return average_VMT * nominal_VMT / np.mean(nominal_VMT)
 
 """
 Function: Gets the mileage given an input payload
@@ -159,17 +158,19 @@ def get_electricity_cost_by_year(parameters, mileage, demand_charge, electricity
 """
 Function: Reads in and evaluates specs and performance parameters for the truck
 Inputs:
-    - m_payload_lb (float):
-    - truck_type (string)
-    - battery_chemistry (string)
-    - e_bat (float)
-    - m_truck_max_lb (float)
-    - scenario (string)
+    - m_payload_lb (float): Payload carried by the truck, in lb
+    - truck_type (string): String identifier for truck specs
+    - battery_chemistry (string): Battery chemistry (either NMC or LFP)
+    - e_bat (float): Energy capacity of the truck battery, in kWh
+    - m_truck_max_lb (float): Maximum allowable GVW of the truck (82000lb for EVs in California)
+    - scenario (string): Time scenario (Present, Mid term or Long term)
 """
-def get_vehicle_model_results(m_payload_lb, truck_type='semi', battery_chemistry='NMC', e_bat=825, m_truck_max_lb=82000, scenario='Present'):
+def get_vehicle_model_results(m_payload_lb, average_VMT, truck_type='semi', battery_chemistry='NMC', e_bat=825, m_truck_max_lb=82000, scenario='Present'):
 
     # Read in parameters for the given truck type
     parameters = data_collection_tools.read_parameters(truck_params = truck_type)
+    
+    parameters.VMT['VMT (miles)'] = get_VMT_distribution(parameters.VMT['VMT (miles)'], average_VMT)
     
     # Read in data for the chosen scenario
     scenario_data = data_collection_tools.read_scenario_data(scenario=scenario, chemistry=battery_chemistry)
@@ -202,10 +203,22 @@ def get_vehicle_model_results(m_payload_lb, truck_type='semi', battery_chemistry
     
     return parameters, vehicle_model_results_dict
     
-def evaluate_emissions(m_payload_lb, grid_emission_intensity, grid_emission_intensity_year=2022, e_bat=825, battery_chemistry='NMC', m_truck_max_lb=82000, scenario='Present'):
+"""
+Function: Calculates lifecycle GHG emissions of the truck per mile driven, accounting for battery manufacturing and grid electricity production
+Inputs:
+    - m_payload_lb (float): Payload carried by the truck, in lb
+    - grid_emission_intensity (float): Emission intensity of the power grid (g CO2 / kWh)
+    - battery_chemistry (string): Battery chemistry (either NMC or LFP)
+    - e_bat (float): Energy capacity of the truck battery, in kWh
+    - m_truck_max_lb (float): Maximum allowable GVW of the truck (82000lb for EVs in California)
+    - scenario (string): Time scenario (Present, Mid term or Long term)
+"""
+def evaluate_emissions(m_payload_lb, grid_emission_intensity, average_VMT=85000, grid_emission_intensity_year=2020, e_bat=825, battery_chemistry='NMC', m_truck_max_lb=82000, scenario='Present'):
     
     # Evaluate parameters and vehicle model results for the given payload
-    parameters, vehicle_model_results_dict = get_vehicle_model_results(m_payload_lb)
+    parameters, vehicle_model_results_dict = get_vehicle_model_results(m_payload_lb, average_VMT)
+    
+    calculate_replacements(parameters.VMT['VMT (miles)'], vehicle_model_results_dict['Fuel economy (kWh/mi)'], e_bat=825, max_battery_cycles=1000)
     
     # Read in data for the chosen scenario
     scenario_data = data_collection_tools.read_scenario_data(scenario=scenario, chemistry=battery_chemistry)
@@ -213,22 +226,59 @@ def evaluate_emissions(m_payload_lb, grid_emission_intensity, grid_emission_inte
     # Read in battery parameters
     battery_params_dict = data_collection_tools.read_battery_params(chemistry=battery_chemistry)
     
+    # Calculate the number of battery replacements needed
+    battery_params_dict['Replacements'] = calculate_replacements(parameters.VMT['VMT (miles)'], vehicle_model_results_dict['Fuel economy (kWh/mi)'])
+    
     # Calculate GHG emissions per mile
-    # ToDo: implement a function to calculate the number of replacements given the VMT distribution
     GHG_emissions = emissions_tools.emission(parameters).get_WTW(vehicle_model_results_dict, battery_params_dict['Manufacturing emissions (CO2/kWh)'],  battery_params_dict['Replacements'], grid_intensity_start=grid_emission_intensity, start_year=grid_emission_intensity_year)
     
     return GHG_emissions
+
+"""
+Function: Calculates the total number of battery replacements needed for the truck over its lifetime
+Inputs:
+    - VMT_df (pd.DataFrame): Dataframe containing the annual miles traveled (VMT) for each year of the truck's life
+    - mileage (float): Fuel economy of the truck (kWh / mile)
+    - e_bat (float): Energy capacity of the truck battery, in kWh
+    - max_battery_cycles (int): Maximum number of full battery charge-discharge cycles before it needs to be replaced
+"""
+def calculate_replacements(VMT_df, mileage, e_bat=825, max_battery_cycles=1500):
+    lifetime_miles_traveled = VMT_df.sum()
+    lifetime_kWh_charged = lifetime_miles_traveled * mileage
+    lifetime_cycles = lifetime_kWh_charged / e_bat
+    n_replacements = np.floor(lifetime_cycles / max_battery_cycles)
+    return n_replacements
     
-def evaluate_costs(m_payload_lb, electricity_charge, demand_charge, charging_power=750, e_bat=825, battery_chemistry='NMC', m_truck_max_lb=82000, vehicle_purchase_price=250000, scenario='Present'):
+"""
+Function: Calculates lifecycle costs of purchasing and operating per mile driven. Costs account for:
+    - Truck purchase (capital)
+    - Operating costs (maintenance & repair, insurance, misc)
+    - Labor
+    - Electricity
+Inputs:
+    - m_payload_lb (float): Payload carried by the truck, in lb
+    - grid_emission_intensity (float): Emission intensity of the power grid (g CO2 / kWh)
+    - battery_chemistry (string): Battery chemistry (either NMC or LFP)
+    - e_bat (float): Energy capacity of the truck battery, in kWh
+    - m_truck_max_lb (float): Maximum allowable GVW of the truck (82000lb for EVs in California)
+    - vehicle_purchase_price (float): Purchase price of the vehicle. Defaults to the inferred estimated price of $250,000 for the Tesla Semi, based on reports that PepsiCo purchased 18 Semis with $4.5 million in grants (https://www.sacbee.com/news/business/article274186280.html)
+    - scenario (string): Time scenario (Present, Mid term or Long term)
+"""
+def evaluate_costs(m_payload_lb, electricity_charge, demand_charge, average_VMT=85000, charging_power=750, e_bat=825, battery_chemistry='NMC', m_truck_max_lb=82000, vehicle_purchase_price=250000, scenario='Present'):
     
     # Evaluate parameters and vehicle model results for the given payload
-    parameters, vehicle_model_results_dict = get_vehicle_model_results(m_payload_lb)
+    parameters, vehicle_model_results_dict = get_vehicle_model_results(m_payload_lb, average_VMT)
     
     # Read in data for the chosen scenario
     scenario_data = data_collection_tools.read_scenario_data(scenario=scenario, chemistry=battery_chemistry)
     
     # Read in battery parameters
     battery_params_dict = data_collection_tools.read_battery_params(chemistry=battery_chemistry)
+    
+    # Calculate the number of battery replacements needed
+    print(battery_params_dict['Replacements'])
+    battery_params_dict['Replacements'] = calculate_replacements(parameters.VMT['VMT (miles)'], vehicle_model_results_dict['Fuel economy (kWh/mi)'])
+    print(battery_params_dict['Replacements'])
     
     # Calculate the electricity price breakdown for each year
     electricity_cost_df = get_electricity_cost_by_year(parameters, vehicle_model_results_dict['Fuel economy (kWh/mi)'], demand_charge, electricity_charge, charging_power)
@@ -239,29 +289,19 @@ def evaluate_costs(m_payload_lb, electricity_charge, demand_charge, charging_pow
     
     return TCO
 
-    
-def main():
-    # Set default values for variable parameters
-    m_payload_lb = 50000                        # lb
-    m_payload_kg = m_payload_lb * KG_PER_LB     # kg
-    demand_charge = 10                          # $/kW
-    electricity_charge = 0.15                   # cents/kW
-    charging_power = 750                        # Max charging power, in kW
-    e_bat = 825                                 # Evaluated battery capacity for the Tesla Semi, in kWh
-    m_truck_max_lb = 82000                      # Maximum weight of EV trucks, in lb
-    m_truck_max_kg = m_truck_max_lb * KG_PER_LB
-    grid_emission_intensity = 200               # Present grid emission intensity
-    grid_emission_intensity_year = 2022         # Year for the present grid emission intensity
-    scenario = 'Present'
-    vehicle_purchase_price = 250000             # Purchase price for the Tesla semi, based on reports that PepsiCo purchased 18 semis with $4.5 million in grants (https://www.sacbee.com/news/business/article274186280.html)
-    
-    get_emissions_and_tco(m_payload_lb, demand_charge, electricity_charge, grid_emission_intensity)
-    
-    emissions = evaluate_emissions(m_payload_lb, grid_emission_intensity)
-    costs = evaluate_costs(m_payload_lb, electricity_charge, demand_charge)
-    
-    print(emissions)
-    print(costs)
-    
-if __name__ == '__main__':
-    main()
+## Uncomment the main function to test the functions defined above
+#def main():
+#    # Set default values for variable parameters
+#    m_payload_lb = 50000                        # lb
+#    demand_charge = 10                          # $/kW
+#    grid_emission_intensity = 200               # Present grid emission intensity, in g CO2 / kWh
+#    electricity_charge = 0.15                   # cents/kW
+#
+#    emissions = evaluate_emissions(m_payload_lb, grid_emission_intensity)
+#    costs = evaluate_costs(m_payload_lb, electricity_charge, demand_charge)
+#
+#    print(emissions)
+#    print(costs)
+#
+#if __name__ == '__main__':
+#    main()
