@@ -276,9 +276,7 @@ def evaluate_costs(m_payload_lb, electricity_charge, demand_charge, average_VMT=
     battery_params_dict = data_collection_tools.read_battery_params(chemistry=battery_chemistry)
     
     # Calculate the number of battery replacements needed
-    print(battery_params_dict['Replacements'])
     battery_params_dict['Replacements'] = calculate_replacements(parameters.VMT['VMT (miles)'], vehicle_model_results_dict['Fuel economy (kWh/mi)'])
-    print(battery_params_dict['Replacements'])
     
     # Calculate the electricity price breakdown for each year
     electricity_cost_df = get_electricity_cost_by_year(parameters, vehicle_model_results_dict['Fuel economy (kWh/mi)'], demand_charge, electricity_charge, charging_power)
