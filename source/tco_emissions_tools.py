@@ -86,7 +86,25 @@ def calculate_electricity_unit_by_row(row, mileage, demand_charge, electricity_c
         electricity_charge = electricity_charge,
         charging_power = charging_power)
     return pd.Series([total_charge, norm_cap_cost, norm_fixed_monthly, norm_energy_charge, norm_demand_charge])
-        
+
+
+"""
+Function: Plots the given VMT distribution
+Inputs:
+    - VMT_distribution (pd.DataFrame): Distribution of VMT by year
+"""
+def plot_VMT_distribution(VMT_distribution):
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.tick_params(axis='both', which='major', labelsize=15)
+    ax.set_xlabel('Year', fontsize=18)
+    ax.set_ylabel('VMT (miles/year)', fontsize=18)
+    ax.set_xticks(range(1,11))
+    ax.bar(VMT_distribution['Year'], VMT_distribution['VMT (miles)'])
+    average_VMT = np.mean(VMT_distribution['VMT (miles)'])
+    ax.axhline(average_VMT, label=f'Average VMT (miles/year): {average_VMT:.0f}', linestyle='--', color='red')
+    ax.legend(fontsize=16)
+    plt.tight_layout()
+    plt.savefig(f'plots/VMT_distribution_average_{average_VMT:.0f}.png')
     
 """
 Function: Given an average lifetime VMT, obtains the distribution of VMT over a 7-year period, assuming it follows the shape defined in Burnham, A et al. (2021)
@@ -138,7 +156,6 @@ Inputs:
 """
 def get_payload_distribution(m_payload_lb):
     nominal_payload_distribution = pd.read_excel('data/payloaddistribution.xlsx')
-    print(np.mean(nominal_payload_distribution['Payload (lb)']))
     payload_distribution = nominal_payload_distribution.copy()
     payload_distribution['Payload (lb)'] = m_payload_lb * payload_distribution['Payload (lb)'] / np.mean(payload_distribution['Payload (lb)'])
     payload_distribution['Payload (kg)'] = payload_distribution['Payload (lb)']*KG_PER_LB #payload distribution in kgs
@@ -313,8 +330,15 @@ def main():
     grid_emission_intensity = 200               # Present grid emission intensity, in g CO2 / kWh
     electricity_charge = 0.15                   # cents/kW
     
-    payload_distribution = get_payload_distribution(m_payload_lb)
-    plot_payload_distribution(payload_distribution)
+#    # Test getting the payload distribution
+#    payload_distribution = get_payload_distribution(m_payload_lb)
+#    plot_payload_distribution(payload_distribution)
+    
+    # Test getting the VMT distribution
+    parameters = data_collection_tools.read_parameters(truck_params = 'Semi')
+    plot_VMT_distribution(parameters.VMT)
+    parameters.VMT['VMT (miles)'] = get_VMT_distribution(parameters.VMT['VMT (miles)'], 85000)
+    plot_VMT_distribution(parameters.VMT)
 
 #    emissions = evaluate_emissions(m_payload_lb, grid_emission_intensity)
 #    costs = evaluate_costs(m_payload_lb, electricity_charge, demand_charge)
