@@ -180,7 +180,7 @@ def get_payload_penalty(payload_distribution, m_bat_kg, m_truck_no_bat_kg, m_tru
 Function: Plots the electricity unit cost for each year, broken down into its components
 Inputs:
     - electricity_cost_df (pd.DataFrame): Distribution of electricity unit costs by year
-    - identifier_str (string): If not None,
+    - identifier_str (string): If not None, adds a string identifier to the name of the saved plot
 """
 def plot_electricity_cost_by_year(electricity_cost_df, identifier_str=None):
     fig, ax = plt.subplots(figsize=(8, 5))
