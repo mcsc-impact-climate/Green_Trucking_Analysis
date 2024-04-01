@@ -10,7 +10,7 @@ import numpy as np
 import scipy as scipy
 import matplotlib.pyplot as plt
 from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
-import truck_model_tools
+import truck_model_tools_orig as truck_model_tools
 import costing_tools_orig as costing_tools
 import emissions_tools_orig as emissions_tools
 
