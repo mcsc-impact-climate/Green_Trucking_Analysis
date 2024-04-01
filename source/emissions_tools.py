@@ -16,7 +16,6 @@ def mono_exp(x,a,b,c): #exponential decay curve
 
 params,cov=curve_fit(mono_exp, timeline, carbon_intensity_EIA, [1000000,0.003, 0.1],maxfev=50000000) #fit data to exponential decay curve
 
-
 def CI_grid_cal(timeline):
   carbon_intensity_calc= mono_exp(timeline,params[0],params[1],params[2])
   return carbon_intensity_calc
@@ -32,18 +31,6 @@ data_CI=[
 CI=pd.DataFrame(data_CI, index=['IEA STEPS', 'IEA APS','EPPA Paris 2C', 'EPPA Accelerated', 'EIA'])
 carbon_intensity_calc=CI_grid_cal(timeline)
 
-###plots
-#plt.plot(timeline, carbon_intensity_calc, ':',linewidth=3, color='#D37416', label='Fitted curve to EIA'), plt.xlabel('Years'), plt.ylabel('Grid carbon intensity ($gCO_2/kWh$)')
-#plt.scatter(*zip(*sorted(data_CI[0].items())), color='#A1AE6F', marker="o", label='IEA STEPS')
-#plt.scatter(*zip(*sorted(data_CI[1].items())), color='#75794E', marker="o", label='IEA APS')
-#plt.scatter(*zip(*sorted(data_CI[2].items())), color='#678E47', marker="o", label='EPPA Paris $2^o$C')
-#plt.scatter(*zip(*sorted(data_CI[3].items())), color='#4E8B78', marker="o", label='EPPA accelerated actions')
-#plt.scatter(*zip(*sorted(data_CI[4].items())), color='#FFBC4A', marker="o", edgecolor='#D37416', linewidth=2, label='EIA')
-#
-#plt.fill_between(timeline, carbon_intensity_calc-CI.std(), carbon_intensity_calc+CI.std(),alpha=0.1, facecolor='#DACC75')
-#plt.legend()
-#plt.savefig('plots/Grid_carbon_intensity.png')
-
 ####****Emissions analysis****####
 class emission:
   def __init__(self, parameters):
@@ -52,7 +39,7 @@ class emission:
 ##Inputs: GHG battery manufacturing (GHG_bat_unit, g CO2/kWh), number of replacements (replacements), vehicle model results
 ##Output: GHGs emissions (gCO2/mi), Well to Wheel. We did not consider other emissions like PM2.5
 
-  def get_WTW(self, vehicle_model_results, GHG_bat_unit, replacements, scenario='Present', grid_intensity_start=None, start_year=None):
+  def get_CI_grid_projection(self, scenario='Present', grid_intensity_start=None, start_year=None):
   
     # Establish the timeline to consider for exponentially decaying grid carbon intenstiy
     timeline_start_year = 2020
@@ -64,20 +51,45 @@ class emission:
         timeline = range(2030, 2040)
     elif scenario == 'Long term':
         timeline = range(2050, 2060)
+        
+    # Get EIA projection for grid CI over the vehicle life for the entire US
+    VMT_grid_CI_df = self.parameters.VMT.copy()
+    CI_grid_projection = CI_grid_cal(timeline)
+    
+    VMT_grid_CI_df['US Average Grid CI (g CO2 / kWh)'] = CI_grid_projection
+    
+    # Scale to the grid CI in the first year for the given region
+    if grid_intensity_start:
+        CI_grid_projection = CI_grid_projection * grid_intensity_start / CI_grid_projection[0]
+    
+    VMT_grid_CI_df['Grid CI (g CO2 / kWh)'] = CI_grid_projection
+    
+    return VMT_grid_CI_df
+
+  # Function to visualize the projected grid emissions intensity for a sample input region
+  def plot_CI_grid_projection(self, scenario='Present', grid_intensity_start=None, start_year=None, label='', label_save=''):
+    
+    VMT_grid_CI_df = self.get_CI_grid_projection(scenario, grid_intensity_start, start_year)
+    
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.tick_params(axis='both', which='major', labelsize=15)
+    ax.set_xlabel('Year', fontsize=18)
+    ax.set_ylabel('Grid Emission Intensity (g CO2e / kWh)', fontsize=18)
+    ax.set_xticks(VMT_grid_CI_df['Year'])
+    ax.plot(VMT_grid_CI_df['Year'], VMT_grid_CI_df['US Average Grid CI (g CO2 / kWh)'], label='US Average (EIA)')
+    ax.plot(VMT_grid_CI_df['Year'], VMT_grid_CI_df['Grid CI (g CO2 / kWh)'], label=label)
+    ax.legend(fontsize=16)
+    plt.savefig(f'plots/grid_emission_intensity_projection_{label_save}.png')
+
+  def get_WTW(self, vehicle_model_results, GHG_bat_unit, replacements, scenario='Present', grid_intensity_start=None, start_year=None):
             
     # Emissions are broken down into battery manufacturing and electricity production on the grid
     GHG_emissions = {}
     
     GHG_emissions['GHGs manufacturing (gCO2/mi)'] = (vehicle_model_results['Payload penalty factor'] * (1 + replacements) * vehicle_model_results['Battery capacity (kWh)'] * GHG_bat_unit) / (self.parameters.VMT['VMT (miles)']).sum()
+    
+    VMT_grid_CI_df = self.get_CI_grid_projection(scenario, grid_intensity_start, start_year)
 
-    # Get the average grid CI over the vehicle life, weighted by VMT
-    VMT_grid_CI_df = self.parameters.VMT.copy()
-    
-    CI_grid_projection = CI_grid_cal(timeline)
-    if grid_intensity_start:
-        CI_grid_projection = CI_grid_projection * grid_intensity_start / CI_grid_projection[0]
-    
-    VMT_grid_CI_df['Grid CI (g CO2 / kWh)'] = CI_grid_projection
     average_grid_intensity = (VMT_grid_CI_df['VMT (miles)'] * VMT_grid_CI_df['Grid CI (g CO2 / kWh)']).sum() / VMT_grid_CI_df['VMT (miles)'].sum()
 
     # Multiply by the fuel economy to get the grid emissions per mile (accounting for payload penalty and grid transmission losses)

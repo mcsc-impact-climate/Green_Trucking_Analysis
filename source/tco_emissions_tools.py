@@ -23,6 +23,8 @@ from datetime import datetime
 MONTHS_PER_YEAR = 12
 KG_PER_TON = 1000
 KG_PER_LB = 0.453592
+G_PER_LB = 453.592
+KWH_PER_MWH = 1000
 
 """
 Function: Calculate the monthly charging energy requirements given a truck's annual miles traveled (VMT) and fuel economy
@@ -350,7 +352,8 @@ def evaluate_costs(m_payload_lb, electricity_charge, demand_charge, average_VMT=
     
     return TCO
 
-# Uncomment the main function to test the functions defined above
+"""
+# Uncomment the main function to test functions defined above
 def main():
     # Set default values for variable parameters
     m_payload_lb = 50000                        # lb
@@ -360,29 +363,34 @@ def main():
     average_VMT = 85000                         # miles/year
     charging_power = 750                        # Max charging power, in kW
     
-#    # Test getting the payload distribution
-#    payload_distribution = get_payload_distribution(m_payload_lb)
-#    plot_payload_distribution(payload_distribution)
+    # Test getting the payload distribution
+    payload_distribution = get_payload_distribution(m_payload_lb)
+    plot_payload_distribution(payload_distribution)
     
-#    # Test getting the VMT distribution
-#    parameters = data_collection_tools.read_parameters(truck_params = 'Semi')
-#    plot_VMT_distribution(parameters.VMT)
-#    parameters.VMT['VMT (miles)'] = get_VMT_distribution(parameters.VMT['VMT (miles)'], average_VMT)
-#    plot_VMT_distribution(parameters.VMT)
+    # Test getting the VMT distribution
+    parameters = data_collection_tools.read_parameters(truck_params = 'Semi')
+    plot_VMT_distribution(parameters.VMT)
+    parameters.VMT['VMT (miles)'] = get_VMT_distribution(parameters.VMT['VMT (miles)'], average_VMT)
+    plot_VMT_distribution(parameters.VMT)
     
-#    # Test obtaining and plotting the electricity unit cost for California electricity rates
-#    demand_charge_CA = 13.4       # $/kW
-#    electricity_rate_CA = 0.1918   # $/kWh
-#    parameters, vehicle_model_results_dict = get_vehicle_model_results(m_payload_lb, average_VMT)
-#    electricity_cost_df = get_electricity_cost_by_year(parameters, vehicle_model_results_dict['Fuel economy (kWh/mi)'], demand_charge_CA, electricity_rate_CA, charging_power)
-#    print(electricity_cost_df)
-#    plot_electricity_cost_by_year(electricity_cost_df, 'CA')
+    # Test obtaining and plotting the electricity unit cost for California electricity rates
+    demand_charge_CA = 13.4       # $/kW
+    electricity_rate_CA = 0.1918   # $/kWh
+    parameters, vehicle_model_results_dict = get_vehicle_model_results(m_payload_lb, average_VMT)
+    electricity_cost_df = get_electricity_cost_by_year(parameters, vehicle_model_results_dict['Fuel economy (kWh/mi)'], demand_charge_CA, electricity_rate_CA, charging_power)
+    plot_electricity_cost_by_year(electricity_cost_df, 'CA')
 
-#    emissions = evaluate_emissions(m_payload_lb, grid_emission_intensity)
-#    costs = evaluate_costs(m_payload_lb, electricity_charge, demand_charge)
-#
-#    print(emissions)
-#    print(costs)
+    # Plot the projected grid emission intensity for the WECC California balancing authority
+    emission_intensity_lb_per_MWh = 515.483      # lb CO2e / MWh
+    emission_intensity_g_per_kWh = emission_intensity_lb_per_MWh * G_PER_LB / KWH_PER_MWH
+    emissions_tools.emission(parameters).plot_CI_grid_projection(scenario='Present', grid_intensity_start=emission_intensity_g_per_kWh, start_year=2020, label='WECC California', label_save='CAMX')
+
+    emissions = evaluate_emissions(m_payload_lb, grid_emission_intensity)
+    costs = evaluate_costs(m_payload_lb, electricity_charge, demand_charge)
+
+    print(emissions)
+    print(costs)
 
 if __name__ == '__main__':
     main()
+"""
