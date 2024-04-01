@@ -10,8 +10,6 @@ import scipy as scipy
 import matplotlib.pyplot as plt
 from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
 import truck_model_tools
-import costing_tools
-import emissions_tools
 from scipy.interpolate import interp1d
 from scipy.optimize import root_scalar
 import pickle

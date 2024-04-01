@@ -11,8 +11,8 @@ import scipy as scipy
 import matplotlib.pyplot as plt
 from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
 import truck_model_tools
-import costing_tools
-import emissions_tools
+import costing_tools_orig as costing_tools
+import emissions_tools_orig as emissions_tools
 
 new_rc_params = {'text.usetex': False,
 "svg.fonttype": 'none'
