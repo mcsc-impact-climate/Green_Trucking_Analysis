@@ -14,6 +14,7 @@ class cost:
   def get_capital(self, vehicle_model_results, replacements, capital_cost_unit,battery_unit_cost,discountfactor):
     #We consider replacement of NMC battery in the 5th year of truck's lifetime
     # DMM: Costs are all per unit power rating, but if you find absolute cost that's fine too
+    print()
     capital = capital_cost_unit['glider ($)'] + (capital_cost_unit['motor and inverter ($/kW)']*self.parameters.p_motor_max/1000) + (capital_cost_unit['DC-DC converter ($/kW)']*self.parameters.p_aux/1000) + ((1+(replacements*discountfactor[5]))*(battery_unit_cost*vehicle_model_results['Energy battery (kWh)']))
     total_CAPEX = vehicle_model_results['Payload penalty factor']*capital/self.parameters.VMT.sum()
     return total_CAPEX #in $ per mile
