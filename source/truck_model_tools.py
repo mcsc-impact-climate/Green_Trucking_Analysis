@@ -1,3 +1,6 @@
+# Tools for truck model simulation
+# Note: Code adapted by Danika MacDonell from a colab notebook written by Kariana Moreno Sader
+
 import numpy as np
 import scipy as scipy
 from scipy import integrate
@@ -5,8 +8,6 @@ import pandas as pd
 
 KG_PER_TON = 1000
 KG_PER_LB = 0.453592
-
-####***Passing input parameters to all classes****####
 
 class read_parameters:
   def __init__(self, f_truck_params, f_economy_params, f_constants, f_vmt):

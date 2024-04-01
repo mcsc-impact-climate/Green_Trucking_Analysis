@@ -1,4 +1,5 @@
 # **Emissions analysis**
+# Note: Code adapted by Danika MacDonell from a colab notebook written by Kariana Moreno Sader
 
 import numpy as np
 import pandas as pd

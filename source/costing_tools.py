@@ -1,5 +1,6 @@
 ####****Cost analysis****####
 #TCSs (in $ per vehicle mile travelled) are given in the corresponding present values of each scenario today, 2030 and 2050
+# Note: Code adapted by Danika MacDonell from a colab notebook written by Kariana Moreno Sader
 
 #Inputs: Vehicle model results, number of replacements, capital and operating unit costs, GHG emissions, social cost of carbon and discount dactor
 #Output: TCS, total operating costs per mile, total capital costs per mile, GHGs emissions penalty per mile

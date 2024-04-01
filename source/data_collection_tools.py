@@ -1,6 +1,7 @@
 """
 Date: March 26, 2024
 Purpose: Collect input data for truck simulation and lifecycle cost and emissions assessment
+Note: Code adapted by Danika MacDonell from a colab notebook written by Kariana Moreno Sader
 """
 
 import pandas as pd

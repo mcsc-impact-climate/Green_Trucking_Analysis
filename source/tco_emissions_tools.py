@@ -6,7 +6,7 @@ Purpose: Evaluate lifecycle costs and emissions as a function of:
     - demand charge
     - grid emission intensity
     - VMT
-This code was originally written by Sayandeep Biswas, with modifications by Danika MacDonell
+This code was originally written by Kariana Moreno Sader and Sayandeep Biswas, with modifications by Danika MacDonell
 """
 
 # Import packages
