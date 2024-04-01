@@ -175,6 +175,35 @@ def get_payload_penalty(payload_distribution, m_bat_kg, m_truck_no_bat_kg, m_tru
     payload_distribution['Payload loss (kg)'] = payload_distribution['Payload (kg)'].apply(lambda x: np.maximum(x - payload_max_kg, 0))
     payload_penalty = 1 + (alpha*payload_distribution['Payload loss (kg)'].mean()) / payload_max_kg
     return payload_penalty
+    
+"""
+Function: Plots the electricity unit cost for each year, broken down into its components
+Inputs:
+    - electricity_cost_df (pd.DataFrame): Distribution of electricity unit costs by year
+    - identifier_str (string): If not None,
+"""
+def plot_electricity_cost_by_year(electricity_cost_df, identifier_str=None):
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.tick_params(axis='both', which='major', labelsize=15)
+    ax.set_xlabel('Year', fontsize=18)
+    ax.set_ylabel('Electricity unit cost ($/kWh)', fontsize=18)
+    
+    # Positions of the bars on the x-axis
+    ind = electricity_cost_df['Year']
+    
+    # Stack each component of the electricity unit price
+    p1 = ax.bar(ind, electricity_cost_df['Normalized capital'], label='Normalized capital')
+    p2 = ax.bar(ind, electricity_cost_df['Normalized fixed'], bottom=electricity_cost_df['Normalized capital'], label='Normalized fixed')
+    p3 = ax.bar(ind, electricity_cost_df['Normalized energy charge'], bottom=electricity_cost_df['Normalized capital'] + electricity_cost_df['Normalized fixed'], label='Normalized energy charge')
+    p4 = ax.bar(ind, electricity_cost_df['Normalized demand charge'], bottom=electricity_cost_df['Normalized capital'] + electricity_cost_df['Normalized fixed'] + electricity_cost_df['Normalized energy charge'], label='Normalized demand charge')
+    
+    ax.set_xticks(ind)
+    ax.legend(fontsize=16)
+    plt.tight_layout()
+    if identifier_str:
+        plt.savefig(f'plots/electricity_unit_price_{identifier_str}.png')
+    else:
+        plt.savefig(f'plots/electricity_unit_price.png')
 
 """
 Function: Evaluates the total electricity cost for each year given the varying VMT
@@ -317,7 +346,6 @@ def evaluate_costs(m_payload_lb, electricity_charge, demand_charge, average_VMT=
     electricity_cost_df = get_electricity_cost_by_year(parameters, vehicle_model_results_dict['Fuel economy (kWh/mi)'], demand_charge, electricity_charge, charging_power)
 
     # Calculate TCO per mile
-    # ToDo: implement a function to calculate the number of replacements given the VMT distribution
     TCO = costing_tools.cost(parameters).get_TCO(vehicle_model_results_dict, scenario_data['Capital Costs ($/kW)'], scenario_data['Battery Unit Cost ($/kWh)'], scenario_data['Operating Costs ($/mi)'], electricity_cost_df['Total'], battery_params_dict['Replacements'], vehicle_purchase_price = vehicle_purchase_price)
     
     return TCO
@@ -329,16 +357,26 @@ def main():
     demand_charge = 10                          # $/kW
     grid_emission_intensity = 200               # Present grid emission intensity, in g CO2 / kWh
     electricity_charge = 0.15                   # cents/kW
+    average_VMT = 85000                         # miles/year
+    charging_power = 750                        # Max charging power, in kW
     
 #    # Test getting the payload distribution
 #    payload_distribution = get_payload_distribution(m_payload_lb)
 #    plot_payload_distribution(payload_distribution)
     
-    # Test getting the VMT distribution
-    parameters = data_collection_tools.read_parameters(truck_params = 'Semi')
-    plot_VMT_distribution(parameters.VMT)
-    parameters.VMT['VMT (miles)'] = get_VMT_distribution(parameters.VMT['VMT (miles)'], 85000)
-    plot_VMT_distribution(parameters.VMT)
+#    # Test getting the VMT distribution
+#    parameters = data_collection_tools.read_parameters(truck_params = 'Semi')
+#    plot_VMT_distribution(parameters.VMT)
+#    parameters.VMT['VMT (miles)'] = get_VMT_distribution(parameters.VMT['VMT (miles)'], average_VMT)
+#    plot_VMT_distribution(parameters.VMT)
+    
+#    # Test obtaining and plotting the electricity unit cost for California electricity rates
+#    demand_charge_CA = 13.4       # $/kW
+#    electricity_rate_CA = 0.1918   # $/kWh
+#    parameters, vehicle_model_results_dict = get_vehicle_model_results(m_payload_lb, average_VMT)
+#    electricity_cost_df = get_electricity_cost_by_year(parameters, vehicle_model_results_dict['Fuel economy (kWh/mi)'], demand_charge_CA, electricity_rate_CA, charging_power)
+#    print(electricity_cost_df)
+#    plot_electricity_cost_by_year(electricity_cost_df, 'CA')
 
 #    emissions = evaluate_emissions(m_payload_lb, grid_emission_intensity)
 #    costs = evaluate_costs(m_payload_lb, electricity_charge, demand_charge)
