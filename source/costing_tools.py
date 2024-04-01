@@ -30,7 +30,7 @@ class cost:
     total_CAPEX = vehicle_model_results['Payload penalty factor'] * capital / self.parameters.VMT['VMT (miles)'].sum()
     return total_CAPEX #in $ per mile
 
-  def get_operating(self, vehicle_model_results, operating_cost_unit, electricity_unit_by_year, total_CAPEX,discountfactor):
+  def get_operating(self, vehicle_model_results, operating_cost_unit, electricity_unit_by_year, total_CAPEX, discountfactor):
   
     # Calculate the average discounted electricity rate over the 10-year lifetime of the vehicle
     average_discounted_electricity_rate = np.sum(self.parameters.VMT['VMT (miles)'] * electricity_unit_by_year * discountfactor) / self.parameters.VMT['VMT (miles)'].sum()

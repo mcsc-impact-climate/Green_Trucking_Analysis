@@ -115,12 +115,30 @@ def get_mileage(m_payload, f_linear_params = 'tables/payload_vs_mileage_best_fit
     return mileage, mileage_unc
     
 """
+Function: Plots the given payload distribution
+Inputs:
+    - payload_distribution (pd.DataFrame)
+"""
+def plot_payload_distribution(payload_distribution):
+    payload_distribution_lb = np.asarray(payload_distribution['Payload (lb)'])
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.tick_params(axis='both', which='major', labelsize=15)
+    ax.set_xlabel('Payload (lb)', fontsize=18)
+    ax.hist(payload_distribution_lb, bins=20)
+    average_payload = np.mean(payload_distribution_lb)
+    ax.axvline(average_payload, label=f'Average payload (lb): {average_payload:.0f}', linestyle='--', color='red')
+    ax.legend(fontsize=16)
+    plt.tight_layout()
+    plt.savefig(f'plots/payload_distribution_average_{average_payload:.0f}lb.png')
+
+"""
 Function: Collects the VIUS payload distribution for class 8 semis and scales it to have the given average payload
 Inputs:
     - payload (float): Desired average payload, in lb
 """
 def get_payload_distribution(m_payload_lb):
     nominal_payload_distribution = pd.read_excel('data/payloaddistribution.xlsx')
+    print(np.mean(nominal_payload_distribution['Payload (lb)']))
     payload_distribution = nominal_payload_distribution.copy()
     payload_distribution['Payload (lb)'] = m_payload_lb * payload_distribution['Payload (lb)'] / np.mean(payload_distribution['Payload (lb)'])
     payload_distribution['Payload (kg)'] = payload_distribution['Payload (lb)']*KG_PER_LB #payload distribution in kgs
@@ -287,19 +305,22 @@ def evaluate_costs(m_payload_lb, electricity_charge, demand_charge, average_VMT=
     
     return TCO
 
-## Uncomment the main function to test the functions defined above
-#def main():
-#    # Set default values for variable parameters
-#    m_payload_lb = 50000                        # lb
-#    demand_charge = 10                          # $/kW
-#    grid_emission_intensity = 200               # Present grid emission intensity, in g CO2 / kWh
-#    electricity_charge = 0.15                   # cents/kW
-#
+# Uncomment the main function to test the functions defined above
+def main():
+    # Set default values for variable parameters
+    m_payload_lb = 50000                        # lb
+    demand_charge = 10                          # $/kW
+    grid_emission_intensity = 200               # Present grid emission intensity, in g CO2 / kWh
+    electricity_charge = 0.15                   # cents/kW
+    
+    payload_distribution = get_payload_distribution(m_payload_lb)
+    plot_payload_distribution(payload_distribution)
+
 #    emissions = evaluate_emissions(m_payload_lb, grid_emission_intensity)
 #    costs = evaluate_costs(m_payload_lb, electricity_charge, demand_charge)
 #
 #    print(emissions)
 #    print(costs)
-#
-#if __name__ == '__main__':
-#    main()
+
+if __name__ == '__main__':
+    main()
