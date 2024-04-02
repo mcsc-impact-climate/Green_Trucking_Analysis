@@ -53,5 +53,37 @@ python source/plot_combined_efficiency_scans_full.py
 
 The resulting plot can be found in `plots/gvw_dist_vs_combined_eff.png`.
 
-## 
+## Evaluate straight line approximation of fuel economy as a function of payload
+
+Using the Tesla Semi parameters established from the above analysis, the scripts [`evaluate_payload_vs_energy_economy.py`](source/evaluate_payload_vs_energy_economy.py) and [`make_payload_vs_mileage_function.py`](source/make_payload_vs_mileage_function.py) evaluate the best-fitting payload for each drivecycle, then perform a linear fit of fuel economy vs. payload to approximate a linear functional relationship between these two parameters. The code takes ~1 minute to run.
+
+To run:
+
+```bash
+# Evaluate the best-fitting payload for each drivecycle
+python source/evaluate_payload_vs_energy_economy.py
+
+# Evaluate the best fit line of fuel economy vs. payload
+python source/make_payload_vs_mileage_function.py
+```
+
+This will produce a visualization of the linear fit in `plots/payload_vs_mileage_function.png` and a csv containing the best-fit linear parameters in `tables/payload_vs_mileage_best_fit_params.csv'`.
+
+## Lifecycle costing and emissions
+
+Lifecycle costing and emissions is performed using the tools contained in [`costing_tools.py`](./costing_tools.py), [`emissions_tools.py`](./emissions_tools.py), and [`tco_emissions_tools.py`](./tco_emissions_tools.py). 
+
+Run [`validate_costing_and_emissions_tools.py`](./source/validate_costing_and_emissions_tools.py) to produce validation plots for the costing and emissions code:
+
+```bash
+python source/validate_costing_and_emissions_tools.py
+```
+
+This will produce the following plots:
+
+* `plots/VMT_distribution_average_*.png`: Distribution of VMT (annual vehicle miles traeled) with the average VMT specified [here](./source/validate_costing_and_emissions_tools.py#L85).
+* `plots/payload_distribution_average_*lb.png`: Payload distribution, with the average payload specified [here](./source/validate_costing_and_emissions_tools.py#L81).
+* `plots/electricity_unit_price.png`: Electricity unit cost for each year of the truck's life, broken down into its components.
+* `plots/lifecycle_emissions_validation.png`: Validation plot showing the components of evaluated lifecycle emissions for the sample inputs defined in the main() function.
+* `plots/lifecycle_costs_validation.png`: Same validation plot as above, but for lifecycle costs. 
 
