@@ -58,50 +58,11 @@ df_battery_data = pd.read_csv('data/default_battery_params.csv', index_col=0)
 df_scenarios = pd.read_csv('data/scenario_data.csv', index_col=0)
 e_present_density_NMC = float(df_scenarios['NMC battery energy density'].iloc[0])
 eta_battery_NMC = df_battery_data['Value'].loc['NMC roundtrip efficiency']
-alpha = 1 #for payload penalty factor calculations (alpha = 1 for base case, alpha = 2: complete dependency in payload measurements)
 
-# Read in GHG emissions parameters
-GHG_bat_unit_NMC = df_battery_data['Value'].loc['NMC manufacturing emissions'] #g CO2/kWh
-replacements_NMC = df_battery_data['Value'].loc['NMC replacements']
-
-# Read in costing parameters for present day scenario
-
-# Motor and inverter cost is given per unit of drivetrain power rating (Motor peak power)
-# DC-DC converter cost is given per unit of auxiliary power rating  (Auxiliary loads)
-# Insurance cost is per unit of capital cost of a single BET (no payload penalty included). We computed from reported insurance cost (0.1969 $/mi) for a BET vehicle cost (0.9933 $/mi). Source: https://publications.anl.gov/anlpubs/2021/05/167399.pdf
-# Glider cost from Jones, R et al. (2023). Developing and Benchmarking a US Long-haul Drive Cycle forVehicle Simulations, Costing and Emissions Analysis
-capital_cost_unit = pd.DataFrame({'glider ($)': [float(df_scenarios['Cost of glider'].iloc[0])], 'motor and inverter ($/kW)': [float(df_scenarios['Cost of motor and inverter'].iloc[0])], 'DC-DC converter ($/kW)': [float(df_scenarios['Cost of DC-DC converter'].iloc[0])]})
-
-operating_cost_unit = pd.DataFrame({'maintenance & repair ($/mi)': [float(df_scenarios['Maintenance and repair cost'].iloc[0])], 'labor ($/mi)': [float(df_scenarios['Labor cost'].iloc[0])], 'insurance ($/mi)': [float(df_scenarios['Insurance cost'].iloc[0])], 'misc ($/mi)': [float(df_scenarios[' Miscellaneous costs'].iloc[0])]})
-
-electricity_unit = [float(df_scenarios['Electricity price'].iloc[0])]
-
-SCC = [float(df_scenarios['Social cost of carbon'].iloc[0])] #social cost of carbon in $/ton CO2. Source: https://www.whitehouse.gov/wp-content/uploads/2021/02/TechnicalSupportDocument_SocialCostofCarbonMethaneNitrousOxide.pdf
-
-battery_unit_cost_NMC = [float(df_scenarios['NMC battery unit cost'].iloc[0])] #NMC unit cost in $/kWh
-###########################################################################################################
-
-"""
-################################# Analyze the VIUS payload distribution ###################################
-fig, ax = plt.subplots(figsize=(10, 6))
-ax.tick_params(axis='both', which='major', labelsize=14)
-n, bins, patches = ax.hist(df_payload_distribution['Payload (lb)'], bins=100)
-bin_width = bins[1] - bins[0]
-ax.set_xlabel('Payload (lb)', fontsize=16)
-ax.set_ylabel(f'Events / {bin_width:.0f}lb', fontsize=16)
-plt.show()
-###########################################################################################################
-"""
-
-
-############################# Evaluate model parameters for Tesla drivecycles #############################
 # Set the drag coefficient to the reported value for the Tesla semi
 parameters.cd = 0.22   # Source: https://eightify.app/summary/technology-and-innovation/elon-musk-unveils-tesla-semi-impressive-aerodynamic-design-long-range-efficient-charging
 parameters.a_cabin = 10.7  # Source: https://www.motormatchup.com/catalog/Tesla/Semi-Truck/2022/Empty
-#parameters.p_motor_max = 1000000
-#parameters.eta_m = 0.95
-#parameters.eta_gs = 1.
-#parameters.eta_i = 0.98
+
 ###########################################################################################################
 
 # Function to get NACFE results for the given truck and driving event
@@ -131,7 +92,7 @@ def update_event_dod(parameters, truck_name, driving_event):
 
 
 # Function to get truck model results over a range of payload sizes
-def get_model_results_vs_payload(truck_name, driving_event, payload_min=0, payload_max=80000, n_payloads=10, e_density_battery = e_present_density_NMC, battery_roundtrip_efficiency = eta_battery_NMC):
+def get_model_results_vs_payload(truck_name, driving_event, payload_min=0, payload_max=100000, n_payloads=10, e_density_battery = e_present_density_NMC, battery_roundtrip_efficiency = eta_battery_NMC):
 
     # Collect the drivecycle
     df_drivecycle = truck_model_tools.extract_drivecycle_data(f'data/{truck_name}_drive_cycle_{driving_event}.csv')
@@ -150,7 +111,7 @@ def get_model_results_vs_payload(truck_name, driving_event, payload_min=0, paylo
     return vehicle_model_results
     
 # Function to evaluate the payload and GVW for which the fuel economy and battery capacity best match the values extrapolated from the NACFE data
-def evaluate_matching_payloads(vehicle_model_results, payload_min=0, payload_max=80000):
+def evaluate_matching_payloads(vehicle_model_results, payload_min=0, payload_max=100000):
     cs_e_bat = interp1d(vehicle_model_results['Average Payload (lb)'], vehicle_model_results['Battery capacity (kWh)'])
     cs_mileage = interp1d(vehicle_model_results['Average Payload (lb)'], vehicle_model_results['Fuel economy (kWh/mi)'])
     cs_m = interp1d(vehicle_model_results['Average Payload (lb)'], vehicle_model_results['Total vehicle mass (lbs)'])
@@ -158,7 +119,6 @@ def evaluate_matching_payloads(vehicle_model_results, payload_min=0, payload_max
     def root_func(x, cs, y_target):
         return cs(x) - y_target
         
-    
     payload_e_bat = root_scalar(lambda x: root_func(x, cs_e_bat, NACFE_results['Battery capacity (kWh)']), bracket=[payload_min, payload_max]).root
     payload_mileage = root_scalar(lambda x: root_func(x, cs_mileage, NACFE_results['Fuel economy (kWh/mi)']), bracket=[payload_min, payload_max]).root
     payload_average = (payload_e_bat + payload_mileage) / 2.
@@ -244,7 +204,7 @@ def visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_re
         plt.savefig(f'plots/truck_model_results_vs_payload_{truck_name}_drivecycle_{driving_event}.png')
     plt.close()
 
-"""
+
 # Evaluate GVW for each truck and drivecycle event
 evaluated_gvws = {}
 for truck_name in drivecycles:
@@ -274,10 +234,10 @@ for truck_name in drivecycles:
 # Save the evaluated GVWs as a pickle file
 with open('pickle/fitted_gvws.pkl', 'wb') as f:
     pickle.dump(evaluated_gvws, f)
-"""
+
 ###########################################################################################################
 
-"""
+
 ######################### Analyze the distribution of GVWs evaluated by the model #########################
 with open('pickle/fitted_gvws.pkl', 'rb') as f:
     evaluated_gvws = pickle.load(f)
@@ -325,10 +285,11 @@ plt.tight_layout()
 plt.savefig('plots/Evaluated_GVW_Distribution.png')
 plt.close()
 ###########################################################################################################
-"""
 
-"""
-####################### Plot the best-fitting GVW as a function of various parameters #####################
+
+
+###################### Plot the best-fitting GVW as a function of various parameters ######################
+
 # Allow the max motor power to vary between 300,000W and 1,000,000W
 truck_name = 'pepsi_1'
 name_title = truck_name.replace('_', ' ').capitalize()
@@ -410,7 +371,7 @@ for combined_eff in combined_effs:
     print(f'Evaluated GVW: {gvw_payload_average}')
     
     # Visualize the results
-    visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_results, payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage)
+    visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_results, payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m)
     
     # Document the evaluated GVW
     evaluated_gvws_df = pd.concat([evaluated_gvws_df, pd.DataFrame({'Combined efficiency': [combined_eff], 'Max GVW (lb)': [gvw_payload_average]})], ignore_index=True)
@@ -436,9 +397,9 @@ plt.savefig('plots/matching_gvw_vs_combined_eff.png')
 ###################################################################
     
 ###########################################################################################################
-"""
 
-"""
+
+
 ############# Evaluate best-fitting GVW vs. energy density ############
 truck_name = 'pepsi_1'
 name_title = truck_name.replace('_', ' ').capitalize()
@@ -491,15 +452,16 @@ plt.savefig('plots/matching_gvw_vs_battery_energy_density.png')
 ###################################################################
     
 ###########################################################################################################
-"""
 
-"""
+
+
 ############# Evaluate best-fitting GVW vs. battery roundtrip efficiency ############
 truck_name = 'pepsi_1'
 name_title = truck_name.replace('_', ' ').capitalize()
 driving_event = 2
 evaluated_gvws_df = pd.DataFrame(columns=['Max GVW (lb)', 'Battery Roundtrip Efficiency'])
 battery_roundtrip_efficiencies = np.linspace(0.9, 1, 10)
+parameters.m_max = 100000
 
 for roundtrip_efficiency in battery_roundtrip_efficiencies:
     
@@ -545,16 +507,16 @@ plt.savefig('plots/matching_gvw_vs_battery_roundtrip_efficiency.png')
 ###################################################################
     
 ###########################################################################################################
-"""
 
-############# Evaluate best-fitting GVW vs. battery roundtrip efficiency ############
+
+############# Evaluate best-fitting GVW vs. rolling resistance coefficient ############
 truck_name = 'pepsi_1'
 name_title = truck_name.replace('_', ' ').capitalize()
 driving_event = 2
 evaluated_gvws_df = pd.DataFrame(columns=['Max GVW (lb)', 'Resistance Coefficient'])
 resistance_coefs = np.linspace(0.004, 0.008, 10)
 parameters.m_max = 100000
-"""
+
 for resistance_coef in resistance_coefs:
     
     print(f'Processing {truck_name} event {driving_event} with resistance coef {resistance_coef:.4f}')
@@ -585,7 +547,7 @@ for resistance_coef in resistance_coefs:
 with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_resistance_coef.pkl', 'wb') as f:
     pickle.dump(evaluated_gvws_df, f)
 ###################################################################
-"""
+
 
 ############ Plot best-fitting GVW vs. combined efficiency ############
 with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_resistance_coef.pkl', 'rb') as f:
@@ -604,3 +566,4 @@ plt.savefig('plots/matching_gvw_vs_resistance_coef.png')
 ###################################################################
     
 ###########################################################################################################
+
