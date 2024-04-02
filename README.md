@@ -6,6 +6,20 @@ This code updates the electricity costing and EV truck emissions+TCS analyses de
 
 Please see [these slides](https://docs.google.com/presentation/d/1l4Rhx-8UHH76ify1ockwKjT68-v6luahxVGwR-wyRJk/edit?usp=sharing) for a summary of methodology and results obtained with this code. 
 
+## Install dependencies
+
+To install python3 dependencies needed to run the code:
+
+```bash
+pip install -r requirements.txt
+```
+
+To install the AWS command-line client needed to download geojson files from AWS:
+
+```bash
+pip install awscli --upgrade --user
+```
+
 ## Check impact of neglecting road grade with uncalibrated model
 Run [`road_grade_comparison.py`](./source/road_grade_comparison.py) to check the impact of neglecting road grade on results obtained with the original uncalibrated model:
 
@@ -103,7 +117,7 @@ To download the input geojsons into the [`geojsons`](./geojsons) dir:
 
 ```bash
 # Install AWS CLI
-pip3 install awscli --upgrade --user
+pip install awscli --upgrade --user
 
 # From the top level of the repo:
 cp s3://mcsc-datahub-files/geojsons_simplified/egrid2020_subregions_merged.geojson ./geojsons
