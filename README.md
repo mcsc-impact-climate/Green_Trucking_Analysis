@@ -71,6 +71,8 @@ This will produce a visualization of the linear fit in `plots/payload_vs_mileage
 
 ## Lifecycle costing and emissions
 
+### Validation plots
+
 Lifecycle costing and emissions is performed using the tools contained in [`costing_tools.py`](./costing_tools.py), [`emissions_tools.py`](./emissions_tools.py), and [`tco_emissions_tools.py`](./tco_emissions_tools.py). 
 
 Run [`validate_costing_and_emissions_tools.py`](./source/validate_costing_and_emissions_tools.py) to produce validation plots for the costing and emissions code:
@@ -85,5 +87,37 @@ This will produce the following plots:
 * `plots/payload_distribution_average_*lb.png`: Payload distribution, with the average payload specified [here](./source/validate_costing_and_emissions_tools.py#L81).
 * `plots/electricity_unit_price.png`: Electricity unit cost for each year of the truck's life, broken down into its components.
 * `plots/lifecycle_emissions_validation.png`: Validation plot showing the components of evaluated lifecycle emissions for the sample inputs defined in the main() function.
-* `plots/lifecycle_costs_validation.png`: Same validation plot as above, but for lifecycle costs. 
+* `plots/lifecycle_costs_validation.png`: Same validation plot as above, but for lifecycle costs.
+* `plots/grid_emission_intensity_projection_CAMX.png`: Comparison of grid emission intensity for the WECC California balancing authority compared with the average US EIA projection.
+
+### Evaluating regional costs and emissions
+
+The script [`evaluate_regional_costs_and_emissions.py`](./source/evaluate_regional_costs_and_emissions.py) uses emissions and costing code to evaluate:
+
+* Lifecycle emissions for each US grid balancing authority, based on the authority's reported grid CO2e intensity. 
+* Lifecycle costs for each US state, based on the state's commercial electricity price and average demand charge.
+
+The code reads in geojson files containing the boundaries of these balancing authorities and states, along with data on the associated CO2e intensity, electricity price and demand charge. 
+
+To download the input geojsons into the [`geojsons`](./geojsons) dir:
+
+```bash
+# Install AWS CLI
+pip3 install awscli --upgrade --user
+
+# From the top level of the repo:
+cp s3://mcsc-datahub-files/geojsons_simplified/egrid2020_subregions_merged.geojson ./geojsons
+cp s3://mcsc-datahub-files/geojsons_simplified/demand_charges_by_state.geojson ./geojsons
+cp s3://mcsc-datahub-files/geojsons_simplified/electricity_rates_by_state_merged.geojson ./geojsons
+```
+
+To run the code:
+
+```bash
+python source/evaluate_regional_costs_and_emissions.py
+```
+
+This will produce two new files in the `geojsons` dir called `geojsons/costs_per_mile.geojson` and `geojsons/emissions_per_mile.geojson`, which contain the evaluated regional lifecycle costs and emissions per mile. It will also produce the following validation plots:
+* `plots/emissions_per_mile.png`: Emissions per mile, broken down into its components, for a few sample balancing authorities
+* `plots/costs_per_mile.png`: Same as above, but costs per mile for a few sample states.
 
