@@ -1,30 +1,35 @@
-# Updating Green group trucking analysis with Tesla parameters
+# Calibration and regional analysis of Green group trucking model
 
 ## Summary
 
 This code updates the electricity costing and EV truck emissions+TCS analyses developed by the Green group with operating parameters obtained for the Tesla Semi obtained from PepsiCo's Tesla Semi pilot in California using data published [here](https://runonless.com/run-on-less-electric-depot-reports/) by NACFE from their 2023 Run On Less pilot. The code used to obtain the operating parameters for the Tesla semi can be found in [this repo](https://github.com/mcsc-impact-climate/PepsiCo_NACFE_Analysis).
 
-## Electricity price for charging
+Please see [these slides](https://docs.google.com/presentation/d/1l4Rhx-8UHH76ify1ockwKjT68-v6luahxVGwR-wyRJk/edit?usp=sharing) for a summary of methodology and results obtained with this code. 
 
-The script [`bet_electricity_costing.py`](./source/bet_electricity_costing.py) calculates the electricity price for EV truck charging for both the nominal parameters used by the Green group or the parameters obtained for the Tesla semi:
+## Check impact of neglecting road grade with uncalibrated model
+Run [`road_grade_comparison.py`](./source/road_grade_comparison.py) to check the impact of neglecting road grade on results obtained with the original uncalibrated model:
+
+```bash
+python source/road_grade_comparison.py 
+```
+
+This will produce plots called `results_comparison_costing.png` and `results_comparison_emissions.png` in the `plots` directory that comparing original model results with vs. without road grade. 
+
+## Check nominal payload distribution and impact of varying model parameters
+
+The code in [`semi_parameter_scans.py`](./source/semi_parameter_scans.py) first evaluates and plots the distribution of best-fitting payloads for the truck model with drag coefficient and frontal area set to the Tesla Semi values of 0.22 and 10.7 m^2. For a single drivecycle (pepsi 1 truck, drivecycle 2), it then performs scans over various model parameters one at a time, evaluating the best-fitting payload at each scan value. The code takes ~15 minutes to run in full (you can comment out unneeded sections to shorten the run time). 
 
 To run:
 
 ```bash
-python source/bet_electricity_costing.py
+python source/semi_parameter_scans.py
 ```
 
-This should produce a csv file `data/electricity_costing_results.csv` which contains both 1) the inputs for the nominal analysis and Tesla semi, and 2) the respective output electricity price and its components. It also produces the following plots to visualize the results for the nominal and Tesla Semi inputs: `plots/electricity_prices_nominal.png` and `plots/electricity_prices_tesla.png`.
-
-## Costing and emissions for electric long-haul
-
-The script [`bet_emissions_and_costing.py`](source/bet_emissions_and_costing.py) calculates lifecycle emissions and total cost to society (TCS) for electric long-haul trucks with either LFP or NMC batteries, and compares it with diesel long-haul. Inputs are either nominal or specific to the Tesla Semi. 
-
-To run:
-
-```bash
-python source/bet_emissions_and_costing.py
-```
-
-This should produce plots comparing lifecycle emissions and TCS for the four sets of inputs considered (NMC/LFP batteries with either noninal or Tesla semi operating parameters): `plots/wtw_emissions.png` and `plots/tcs.png`.
+This will produce the following:
+* `plots/Evaluated_GVW_Distribution.png`: Box plot showing the fitted payload distribution for each truck with the scan parameters set to their default values
+* `plots/matching_gvw_vs_max_motor_power.png`: Variation of best-fitting payload for drivecycle 2 of pepsi 1 truck, with the max motor power allowed to vary. Max motor power is set to the Semi value of 942900 W for subsequent plots.
+* `plots/matching_gvw_vs_combined_eff.png`: Variation of best-fitting payload for drivecycle 2 of pepsi 1 truck, with the combined powertrain efficiency allowed to vary.
+* `plots/matching_gvw_vs_battery_energy_density.png`: Variation of best-fitting payload for drivecycle 2 of pepsi 1 truck, with the battery energy density allowed to vary.
+* `plots/matching_gvw_vs_battery_roundtrip_efficiency.png`: Variation of best-fitting payload for drivecycle 2 of pepsi 1 truck, with the rountrip battery efficiency allowed to vary.
+* `plots/matching_gvw_vs_resistance_coef.png`: Variation of best-fitting payload for drivecycle 2 of pepsi 1 truck, with the coefficient of rolling resistance allowed to vary.
 
