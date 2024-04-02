@@ -26,10 +26,32 @@ python source/semi_parameter_scans.py
 ```
 
 This will produce the following:
-* `plots/Evaluated_GVW_Distribution.png`: Box plot showing the fitted payload distribution for each truck with the scan parameters set to their default values
-* `plots/matching_gvw_vs_max_motor_power.png`: Variation of best-fitting payload for drivecycle 2 of pepsi 1 truck, with the max motor power allowed to vary. Max motor power is set to the Semi value of 942900 W for subsequent plots.
-* `plots/matching_gvw_vs_combined_eff.png`: Variation of best-fitting payload for drivecycle 2 of pepsi 1 truck, with the combined powertrain efficiency allowed to vary.
-* `plots/matching_gvw_vs_battery_energy_density.png`: Variation of best-fitting payload for drivecycle 2 of pepsi 1 truck, with the battery energy density allowed to vary.
-* `plots/matching_gvw_vs_battery_roundtrip_efficiency.png`: Variation of best-fitting payload for drivecycle 2 of pepsi 1 truck, with the rountrip battery efficiency allowed to vary.
-* `plots/matching_gvw_vs_resistance_coef.png`: Variation of best-fitting payload for drivecycle 2 of pepsi 1 truck, with the coefficient of rolling resistance allowed to vary.
+* `plots/Evaluated_GVW_Distribution.png`: Box plot showing the distribution of gross vehicle weights (GVWs) corresponding to the fitted payloads for each truck with the scan parameters set to their default values
+* `plots/matching_gvw_vs_max_motor_power.png`: Variation of best-fitting GVW for drivecycle 2 of pepsi 1 truck, with the max motor power allowed to vary. Max motor power is set to the Semi value of 942900 W for subsequent plots.
+* `plots/matching_gvw_vs_combined_eff.png`: Variation of best-fitting GVW for drivecycle 2 of pepsi 1 truck, with the combined powertrain efficiency allowed to vary.
+* `plots/matching_gvw_vs_battery_energy_density.png`: Variation of best-fitting GVW for drivecycle 2 of pepsi 1 truck, with the battery energy density allowed to vary.
+* `plots/matching_gvw_vs_battery_roundtrip_efficiency.png`: Variation of best-fitting GVW for drivecycle 2 of pepsi 1 truck, with the rountrip battery efficiency allowed to vary.
+* `plots/matching_gvw_vs_resistance_coef.png`: Variation of best-fitting GVW for drivecycle 2 of pepsi 1 truck, with the coefficient of rolling resistance allowed to vary.
+
+You can also check out sample payload fits in `plots/truck_model_results_vs_payload_*_drivecycle_*.png`
+
+## Scan full GVW distributions over combined powertrain efficiency
+
+The code in [`semi_combined_efficiency_scans_full.py`](source/semi_combined_efficiency_scans_full.py) performs a scan over combined powertrain efficiencies, evaluating the fitted GVW over all 20 Tesla Semi drivecycles. By default the rolling resistance is set to 0.0044 for the scan, but it can be modified on [this line](source/semi_combined_efficiency_scans_full.py#L55). The code takes ~10 minutes to run.
+
+To run:
+
+```bash
+python source/semi_combined_efficiency_scans_full.py
+```
+
+You can then produce box plots of the resulting GW distributions as a function of combined efficiency by running [`plot_combined_efficiency_scans_full.py`](source/plot_combined_efficiency_scans_full.py):
+
+```bash
+python source/plot_combined_efficiency_scans_full.py
+```
+
+The resulting plot can be found in `plots/gvw_dist_vs_combined_eff.png`.
+
+## 
 
