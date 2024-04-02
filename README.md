@@ -13,7 +13,7 @@ Run [`road_grade_comparison.py`](./source/road_grade_comparison.py) to check the
 python source/road_grade_comparison.py 
 ```
 
-This will produce plots called `results_comparison_costing.png` and `results_comparison_emissions.png` in the `plots` directory that comparing original model results with vs. without road grade. 
+This will produce `plots/results_comparison_costing.png` and `plots/results_comparison_emissions.png` that compare the original model results with vs. without road grade information. 
 
 ## Check nominal payload distribution and impact of varying model parameters
 
