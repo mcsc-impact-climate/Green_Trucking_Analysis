@@ -72,4 +72,4 @@ for combined_eff in combined_effs:
 
 ax.legend(fontsize=15, edgecolor='white', loc='lower right', facecolor='white')
 plt.tight_layout()
-plt.savefig('plots/gvw_dist_vs_combined_eff_resistance_eff_00044.png')
+plt.savefig(f'plots/gvw_dist_vs_combined_eff.png')
