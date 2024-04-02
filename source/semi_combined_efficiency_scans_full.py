@@ -173,89 +173,6 @@ def visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_re
         plt.savefig(f'plots/truck_model_results_vs_payload_{truck_name}_drivecycle_{driving_event}.png')
     plt.close()
 
-"""
-# Evaluate GVW for each truck and drivecycle event
-
-evaluated_gvws = {}
-for truck_name in drivecycles:
-    evaluated_gvws[truck_name] = []
-    drivecycle_events_list = drivecycles[truck_name]
-    for driving_event in drivecycle_events_list:
-        print(f'Processing {truck_name} event {driving_event}')
-        
-        # Read in the NACFE results
-        NACFE_results = get_nacfe_results(truck_name, driving_event)
-        
-        # Update the depth of discharge for the driving event based on the NACFE data
-        update_event_dod(parameters, truck_name, driving_event)
-        
-        # Get the vehicle model results (as a dataframe) as a function of payload
-        vehicle_model_results = get_model_results_vs_payload(truck_name, driving_event)
-        
-        # Get the payloads and resulting GVW for which the truck model results best match the NACFE data. Also collect the cubic splines used for this evaluation (for the purpose of visualization)
-        payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage, cs_m = evaluate_matching_payloads(vehicle_model_results)
-        
-        # Visualize the results
-        visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_results, payload_e_bat, payload_mileage, payload_average, gvw_payload_average, cs_e_bat, cs_mileage)
-        
-        # Document the evaluated GVW
-        evaluated_gvws[truck_name].append(gvw_payload_average)
-        
-# Save the evaluated GVWs as a pickle file
-with open('pickle/fitted_gvws.pkl', 'wb') as f:
-    pickle.dump(evaluated_gvws, f)
-###########################################################################################################
-
-
-######################### Analyze the distribution of GVWs evaluated by the model #########################
-with open('pickle/fitted_gvws.pkl', 'rb') as f:
-    evaluated_gvws = pickle.load(f)
-
-all_evaluated_gvws = np.zeros(0)
-data_boxplot = []
-labels_boxplot = []
-for truck_name in evaluated_gvws:
-    evaluated_gvws_truck = np.array([float(i) for i in evaluated_gvws[truck_name]])
-    evaluated_gvws[truck_name] = evaluated_gvws_truck
-    all_evaluated_gvws = np.append(all_evaluated_gvws, evaluated_gvws_truck)
-    
-    data_boxplot.append(evaluated_gvws_truck)
-    labels_boxplot.append(truck_name.replace('_', ' ').capitalize())
-
-data_boxplot.append(all_evaluated_gvws)
-labels_boxplot.append('Combined')
-
-#print(all_evaluated_gvws)
-#print(evaluated_gvws)
-
-fig, ax = plt.subplots(figsize=(8, 5))
-ax.set_ylabel('GVW best matching NACFE Results (lbs)', fontsize=15)
-ax.axhline(70000, color='red', ls='--')
-ax.tick_params(axis='both', which='major', labelsize=14)
-box = plt.boxplot(data_boxplot)
-plt.xticks([1, 2, 3, 4], labels_boxplot)
-
-for i in range(len(data_boxplot)):
-
-    # Get the x position for the current box plot
-    x_position = i+1
-    
-    # Get the y position for the text annotation. This can be slightly above the box plot.
-    # You may need to adjust this depending on your specific data range and desired appearance.
-    data_max = max(data_boxplot[i])
-    data_min = min(data_boxplot[i])
-    y_position = data_max + 0.2*(data_max-data_min)  # Just above the upper whisker
-    
-    # Place the text annotation
-    n_drivecycles = len(data_boxplot[i])
-    ax.text(x_position, y_position, f'{n_drivecycles} drivecycles', ha='center', va='bottom', fontsize=12)
-
-plt.tight_layout()
-plt.savefig('plots/Evaluated_GVW_Distribution.png')
-plt.close()
-###########################################################################################################
-"""
-
 ####################### Plot the best-fitting GVW as a function of various parameters #####################
 # Allow the max motor power to vary between 300,000W and 1,000,000W
 truck_names = ['pepsi_1', 'pepsi_2', 'pepsi_3']
@@ -296,24 +213,6 @@ def evaluate_matching_gvw(truck_name, driving_event, combined_eff):
     
     return combined_eff, gvw_payload_average, battery_weight_payload_average, tractor_weight_payload_average
 
-"""
-startTime = datetime.now()
-truck_name = 'pepsi_1'
-driving_event = 2
-combined_effs = np.linspace(0.83, 1., 10)
-evaluated_gvws_df = pd.DataFrame(columns=['Combined efficiency', 'Max GVW (lb)', 'Battery weight (lb)', 'Tractor weight (lb)'])
-
-for combined_eff in combined_effs:
-    combined_eff, gvw_payload_average, battery_weight_payload_average, tractor_weight_payload_average = evaluate_matching_gvw(truck_name, driving_event, combined_eff)
-    evaluated_gvws_df = pd.concat([evaluated_gvws_df, pd.DataFrame({'Combined efficiency': [combined_eff], 'Max GVW (lb)': [gvw_payload_average], 'Battery weight (lb)': [battery_weight_payload_average], 'Tractor weight (lb)': [tractor_weight_payload_average]})], ignore_index=True)
-    
-run_time = datetime.now() - startTime
-print(f'Time to run in parallel: {run_time}s')
-
-# Save the evaluated GVWs as a pickle file
-with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_combined_eff.pkl', 'wb') as f:
-    pickle.dump(evaluated_gvws_df, f)
-"""
 
 def parallel_evaluate_matching_gvw(args):
 
@@ -357,22 +256,4 @@ def main():
 if __name__ == '__main__':
     main()
 
-
 ###################################################################
-
-
-############# Plot best-fitting GVW vs. combined efficiency ############
-#with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_combined_eff.pkl', 'rb') as f:
-#    evaluated_gvws_df = pickle.load(f)
-#
-#fig, ax = plt.subplots(figsize=(8, 5))
-#name_title = truck_name.replace('_', ' ').capitalize()
-#ax.set_title(f'{name_title} Event {driving_event}', fontsize=20)
-#ax.set_ylabel('GVW best matching NACFE Results (lbs)', fontsize=15)
-#ax.set_xlabel('Combined powertrain efficiency (%)', fontsize=15)
-#ax.tick_params(axis='both', which='major', labelsize=14)
-#ax.plot(evaluated_gvws_df['Combined efficiency'], evaluated_gvws_df['Max GVW (lb)'], 'o')
-#plt.savefig('plots/matching_gvw_vs_combined_eff.png')
-####################################################################
-    
-###########################################################################################################
