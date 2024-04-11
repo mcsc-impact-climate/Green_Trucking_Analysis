@@ -14,12 +14,6 @@ To install python3 dependencies needed to run the code:
 pip install -r requirements.txt
 ```
 
-To install the AWS command-line client needed to download geojson files from AWS:
-
-```bash
-pip install awscli --upgrade --user
-```
-
 ## Check impact of neglecting road grade with uncalibrated model
 Run [`road_grade_comparison.py`](./source/road_grade_comparison.py) to check the impact of neglecting road grade on results obtained with the original uncalibrated model:
 
@@ -116,9 +110,6 @@ The code reads in geojson files containing the boundaries of these balancing aut
 To download the input geojsons into the [`geojsons`](./geojsons) dir:
 
 ```bash
-# Install AWS CLI
-pip install awscli --upgrade --user
-
 # From the top level of the repo:
 wget https://mcsc-datahub-files.s3.us-west-2.amazonaws.com/geojsons_simplified/egrid2020_subregions_merged.geojson ./geojsons
 wget https://mcsc-datahub-files.s3.us-west-2.amazonaws.com/geojsons_simplified/demand_charges_by_state.geojson ./geojsons
