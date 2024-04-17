@@ -8,16 +8,25 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 G_PER_LB = 453.592
 DEFAULT_PAYLOAD = 50000     # Default payload, in lb
 DEFAULT_AVG_VMT = 85000     # Default average VMT
+DEFAULT_CHARGING_POWER = 750     # Default average VMT
 KWH_PER_MWH = 1000
 CENTS_PER_DOLLAR = 100
 
 ################################### Emissions ###################################
 """
 Function: Collect the geojson containing grid emission intensity for different balancing authorities used to calculate emissions per mile
-Inputs: None
+Inputs:
+    - region_type (string): 'ba' means read in emission intensity by balancing authority region, and 'state' means to read in state-level emission intensity.
 """
-def collect_grid_intensity_geo():
-    with open('geojsons/egrid2020_subregions_merged.geojson', mode='r') as geojson_file:
+def collect_grid_intensity_geo(region_type='ba'):
+    filename = ''
+    if region_type == 'ba':
+        filename = 'egrid2022_subregions_merged.geojson'
+    elif region_type == 'state':
+        filename = 'eia2022_state_merged.geojson'
+    else:
+        print(f'Error: Cannot read in region type {region_type}')
+    with open(f'geojsons/{filename}', mode='r') as geojson_file:
         grid_intensity_geojson = json.load(geojson_file)
     return grid_intensity_geojson
 
@@ -80,19 +89,18 @@ Inputs:
     - average_payload (float): Average payload of shipments carried by the truck
     - average_VMT (float): Average annual miles traveled over the truck's lifetime
 """
-def make_emissions_per_mi_geo(average_payload, average_VMT, grid_intensity_geojson):
+def make_emissions_per_mi_geo(average_payload, average_VMT, grid_intensity_geojson, filename_prefix=''):
     for feature in grid_intensity_geojson['features']:
-        # Check if the 'SRC2ERTA' field exists in the properties
-        if 'SRC2ERTA' in feature['properties']:
-            gCO2e_per_mi_df = get_gCO2e_per_mile(feature['properties']['SRC2ERTA'], average_payload, average_VMT)
+        # Check if the 'CO2_rate' field exists in the properties
+        if 'CO2_rate' in feature['properties'] and not (feature['properties']['CO2_rate'] is None):
+            gCO2e_per_mi_df = get_gCO2e_per_mile(feature['properties']['CO2_rate'], average_payload, average_VMT)
             feature['properties']['C_mi_man'] = gCO2e_per_mi_df['GHGs manufacturing (gCO2/mi)']
             feature['properties']['C_mi_grid'] = gCO2e_per_mi_df['GHGs grid (gCO2/mi)']
             feature['properties']['C_mi_tot'] = gCO2e_per_mi_df['GHGs total (gCO2/mi)']
-            del feature['properties']['SRC2ERTA']
+            del feature['properties']['CO2_rate']
 
-    with open(f'geojsons/emissions_per_mile_payload{average_payload}_avVMT{average_VMT}.geojson', mode='w') as emissions_geojson:
+    with open(f'geojsons/{filename_prefix}emissions_per_mile_payload{average_payload}_avVMT{average_VMT}.geojson', mode='w') as emissions_geojson:
         json.dump(grid_intensity_geojson, emissions_geojson, indent=4)
-    
     ## Plot emissions/mile breakdown for a few sample balancing authorities
     #plot_emissions_per_mile_breakdown(grid_intensity_geojson)
 
@@ -106,9 +114,9 @@ Inputs:
     - lbCO2e_per_kWh (float): Grid emission intensity for the given region (lb CO2e / kWh)
     - average_payload (float): Average payload that the truck carries, in lb
 """
-def get_costs_per_mile(electricity_rate_cents, demand_charge, average_payload = DEFAULT_PAYLOAD, average_VMT=DEFAULT_AVG_VMT):
+def get_costs_per_mile(electricity_rate_cents, demand_charge, average_payload = DEFAULT_PAYLOAD, average_VMT=DEFAULT_AVG_VMT, max_charging_power=DEFAULT_CHARGING_POWER):
     electricity_rate_dollars = electricity_rate_cents / CENTS_PER_DOLLAR
-    cost_per_mi_df = costing_and_emissions_tools.evaluate_costs(average_payload, electricity_rate_dollars, demand_charge, average_VMT=average_VMT)
+    cost_per_mi_df = costing_and_emissions_tools.evaluate_costs(average_payload, electricity_rate_dollars, demand_charge=demand_charge, average_VMT=average_VMT, charging_power=max_charging_power)
     return cost_per_mi_df
 
 """
@@ -180,7 +188,7 @@ Inputs:
     - average_VMT (float): Average annual miles traveled over the truck's lifetime
 Note: The state features in the electricity rate and demand charge geojsons are in the same order because they're both derived from the same base shapefile
 """
-def make_costs_per_mi_geo(average_payload, average_VMT, electricity_rates_geojson, demand_charges_geojson):
+def make_costs_per_mi_geo(average_payload, average_VMT, max_charging_power, electricity_rates_geojson, demand_charges_geojson):
     costs_per_mi_geojson = copy.deepcopy(electricity_rates_geojson)
     for electricity_rate_feature, demand_charge_feature, cost_per_mi_feature in zip(electricity_rates_geojson['features'], demand_charges_geojson['features'], costs_per_mi_geojson['features']):
         # Check if the 'STUSPS' field (state abbreviation) exists in the properties
@@ -195,52 +203,80 @@ def make_costs_per_mi_geo(average_payload, average_VMT, electricity_rates_geojso
                 cost_per_mi_feature['properties']['$_mi_lab'] = None
                 cost_per_mi_feature['properties']['$_mi_op'] = None
             else:
-                costs_per_mile = get_costs_per_mile(electricity_rate_feature['properties']['Cents_kWh'], demand_charge_feature['properties']['Average Ma'], average_payload, average_VMT)
+                costs_per_mile = get_costs_per_mile(electricity_rate_feature['properties']['Cents_kWh'], demand_charge_feature['properties']['Average Ma'], average_payload, average_VMT, max_charging_power)
                 cost_per_mi_feature['properties']['$_mi_tot'] = costs_per_mile['TCO ($/mi)']
                 cost_per_mi_feature['properties']['$_mi_cap'] = costs_per_mile['Total capital ($/mi)']
                 cost_per_mi_feature['properties']['$_mi_el'] = costs_per_mile['Total electricity ($/mi)']
                 cost_per_mi_feature['properties']['$_mi_lab'] = costs_per_mile['Total labor ($/mi)']
                 cost_per_mi_feature['properties']['$_mi_op'] = costs_per_mile['Other OPEXs ($/mi)']
 
-    with open(f'geojsons/costs_per_mile_payload{average_payload}_avVMT{average_VMT}.geojson', mode='w') as cost_geojson:
+    with open(f'geojsons/costs_per_mile_payload{average_payload}_avVMT{average_VMT}_maxChP{max_charging_power}.geojson', mode='w') as cost_geojson:
         json.dump(costs_per_mi_geojson, cost_geojson, indent=4)
         
     ## Plot cost/mile breakdown for a few sample states
     #plot_costs_per_mile_breakdown(costs_per_mi_geojson)
     
-def parallel_make_emissions_and_costs(average_payload, average_VMT, grid_intensity_geojson, electricity_rates_geojson, demand_charges_geojson):
+def parallel_make_emissions(average_payload, average_VMT, grid_intensity_geojson_ba, grid_intensity_geojson_state):
     # Function to execute both tasks sequentially for a given set of arguments
-    make_emissions_per_mi_geo(average_payload, average_VMT, grid_intensity_geojson)
-    make_costs_per_mi_geo(average_payload, average_VMT, electricity_rates_geojson, demand_charges_geojson)
+    make_emissions_per_mi_geo(average_payload, average_VMT, grid_intensity_geojson_ba, 'ba_')
+    make_emissions_per_mi_geo(average_payload, average_VMT, grid_intensity_geojson_state, 'state_')
+
+def parallel_make_costs(average_payload, average_VMT, max_charging_power, electricity_rates_geojson, demand_charges_geojson):
+    make_costs_per_mi_geo(average_payload, average_VMT, max_charging_power, electricity_rates_geojson, demand_charges_geojson)
     
 def main():
-    grid_intensity_geojson = collect_grid_intensity_geo()
+    grid_intensity_geojson_ba = collect_grid_intensity_geo('ba')
+    grid_intensity_geojson_state = collect_grid_intensity_geo('state')
+    
     electricity_rates_geojson, demand_charges_geojson = collect_cost_geos()
     
     average_payloads = [0, 10000, 20000, 30000, 40000, 50000]
     average_VMTs = [40000, 70000, 100000, 130000, 160000, 190000]
+    max_charging_powers = [100, 200, 400, 800]
     
     # Setup the executor
     with ProcessPoolExecutor() as executor:
         # Dictionary to keep track of futures
-        futures = {}
-
+        futures_emissions = {}
+        futures_costs = {}
+        
+        """
+        # Evaluate emissions in parallel
         for average_payload in average_payloads:
             for average_VMT in average_VMTs:
                 # Submit each combination of tasks to be executed in parallel
-                future = executor.submit(parallel_make_emissions_and_costs, average_payload, average_VMT, grid_intensity_geojson, electricity_rates_geojson, demand_charges_geojson)
-                futures[future] = (average_payload, average_VMT)
-
-        # Wait for the futures to complete and handle them if necessary
-        for future in as_completed(futures):
+                future_emissions = executor.submit(parallel_make_emissions, average_payload, average_VMT, grid_intensity_geojson_ba, grid_intensity_geojson_state)
+                futures_emissions[future_emissions] = (average_payload, average_VMT)
+                
+        # Wait for the emissions futures to complete and handle them if necessary
+        for future_emissions in as_completed(futures_emissions):
             # You can add error handling or results processing here
-            average_payload, average_VMT = futures[future]
+            average_payload, average_VMT = futures_emissions[future_emissions]
             try:
-                result = future.result()
+                result = future_emissions.result()
                 # Process result if needed
             except Exception as exc:
                 print(f'Generated an exception: {exc} for payload: {average_payload}, VMT: {average_VMT}')
-
+        """
+                
+        # Evaluate costs in parallel
+        for average_payload in average_payloads:
+            for average_VMT in average_VMTs:
+                for max_charging_power in max_charging_powers:
+                    # Submit each combination of tasks to be executed in parallel
+                    future_costs = executor.submit(parallel_make_costs, average_payload, average_VMT, max_charging_power, electricity_rates_geojson, demand_charges_geojson)
+                    futures_costs[future_costs] = (average_payload, average_VMT, max_charging_power)
+                
+        # Wait for the costs futures to complete and handle them if necessary
+        for future_costs in as_completed(futures_costs):
+            # You can add error handling or results processing here
+            average_payload, average_VMT, max_charging_power = futures_costs[future_costs]
+            try:
+                result = future_costs.result()
+                # Process result if needed
+            except Exception as exc:
+                print(f'Generated an exception: {exc} for payload: {average_payload}, VMT: {average_VMT}, max charging power: {max_charging_power}')
+    
 
 if __name__ == '__main__':
     main()
