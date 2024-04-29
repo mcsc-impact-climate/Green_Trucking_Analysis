@@ -90,7 +90,7 @@ def main():
     plot_payload_distribution(payload_distribution)
     
     # Test getting the VMT distribution
-    parameters = data_collection_tools.read_parameters(truck_params = 'Semi')
+    parameters = data_collection_tools.read_parameters(truck_params = 'Semi', vmt_params = 'daycab_vmt_vius_2021')
     parameters.VMT['VMT (miles)'] = costing_and_emissions_tools.get_VMT_distribution(parameters.VMT['VMT (miles)'], average_VMT)
     plot_VMT_distribution(parameters.VMT)
     

@@ -33,7 +33,7 @@ def parallel_evaluate_matching_payload(args):
     return payload_matching_tools.evaluate_matching_payload(truck_name, driving_event, parameters, battery_params_dict)
 
 def main():
-    parameters = data_collection_tools.read_parameters(truck_params='semi')
+    parameters = data_collection_tools.read_parameters(truck_params='semi', vmt_params = 'daycab_vmt_vius_2021')
     parameters.m_max = 120000
     battery_params_dict = data_collection_tools.read_battery_params()
 

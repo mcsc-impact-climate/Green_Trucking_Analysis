@@ -166,7 +166,7 @@ Inputs:
 def get_vehicle_model_results(m_payload_lb, average_VMT, truck_type='semi', battery_chemistry='NMC', e_bat=825, m_truck_max_lb=82000, scenario='Present'):
 
     # Read in parameters for the given truck type
-    parameters = data_collection_tools.read_parameters(truck_params = truck_type)
+    parameters = data_collection_tools.read_parameters(truck_params = truck_type, vmt_params = 'daycab_vmt_vius_2021')
     
     parameters.VMT['VMT (miles)'] = get_VMT_distribution(parameters.VMT['VMT (miles)'], average_VMT)
     
