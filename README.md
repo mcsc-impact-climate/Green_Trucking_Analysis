@@ -63,13 +63,13 @@ The resulting plot can be found in `plots/gvw_dist_vs_combined_eff.png`.
 
 ## Evaluate straight line approximation of fuel economy as a function of payload
 
-Using the Tesla Semi parameters established from the above analysis, the scripts [`evaluate_payload_vs_energy_economy.py`](source/evaluate_payload_vs_energy_economy.py) and [`make_payload_vs_mileage_function.py`](source/make_payload_vs_mileage_function.py) evaluate the best-fitting payload for each drivecycle, then perform a linear fit of fuel economy vs. payload to approximate a linear functional relationship between these two parameters. The code takes ~1 minute to run.
+Using the Tesla Semi parameters established from the above analysis, the scripts [`evaluate_payload_vs_mileage.py`](source/evaluate_payload_vs_mileage.py) and [`make_payload_vs_mileage_function.py`](source/make_payload_vs_mileage_function.py) evaluate the best-fitting payload for each drivecycle, then perform a linear fit of fuel economy vs. payload to approximate a linear functional relationship between these two parameters. The code takes ~1 minute to run.
 
 To run:
 
 ```bash
 # Evaluate the best-fitting payload for each drivecycle
-python source/evaluate_payload_vs_energy_economy.py
+python source/evaluate_payload_vs_mileage.py
 
 # Evaluate the best fit line of fuel economy vs. payload
 python source/make_payload_vs_mileage_function.py
