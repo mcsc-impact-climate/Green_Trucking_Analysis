@@ -175,11 +175,14 @@ def collect_cost_geos():
 
     with open('geojsons/demand_charges_by_state.geojson', mode='r') as geojson_file:
         demand_charges_geojson = json.load(geojson_file)
+        
+    with open('geojsons/diesel_price_by_state.geojson', mode='r') as geojson_file:
+        diesel_prices_geojson = json.load(geojson_file)
     
     # Ensure both GeoJSON files have the same number of features
     assert len(electricity_rates_geojson['features']) == len(demand_charges_geojson['features']), 'GeoJSON files have different numbers of features.'
     
-    return electricity_rates_geojson, demand_charges_geojson
+    return electricity_rates_geojson, demand_charges_geojson, diesel_prices_geojson
 
 """
 Function: Loop through all states to evaluate the costs per mile for EV trucking using the state-level electricity price and demand charge
@@ -223,25 +226,25 @@ Inputs:
     - average_VMT (float): Average annual miles traveled over the truck's lifetime
 Note: The state features in the electricity rate and demand charge geojsons are in the same order because they're both derived from the same base shapefile
 """
-def make_costs_per_mi_diesel_geo(average_payload, average_VMT, electricity_rates_geojson, demand_charges_geojson):
-    costs_per_mi_geojson = copy.deepcopy(electricity_rates_geojson)
-    for electricity_rate_feature, demand_charge_feature, cost_per_mi_feature in zip(electricity_rates_geojson['features'], demand_charges_geojson['features'], costs_per_mi_geojson['features']):
+def make_costs_per_mi_diesel_geo(average_payload, average_VMT, diesel_prices_geojson):
+    costs_per_mi_geojson = copy.deepcopy(diesel_prices_geojson)
+    for diesel_price_feature, cost_per_mi_feature in zip(diesel_prices_geojson['features'], costs_per_mi_geojson['features']):
         # Check if the 'STUSPS' field (state abbreviation) exists in the properties
-        if 'Cents_kWh' in electricity_rate_feature['properties'] and 'Average Ma' in demand_charge_feature['properties']:
+        if 'Cents_kWh' in diesel_price_feature['properties']:
 
             del cost_per_mi_feature['properties']['Cents_kWh']
 
             if electricity_rate_feature['properties']['Cents_kWh'] is None or demand_charge_feature['properties']['Average Ma'] is None:
                 cost_per_mi_feature['properties']['$_mi_tot'] = None
                 cost_per_mi_feature['properties']['$_mi_cap'] = None
-                cost_per_mi_feature['properties']['$_mi_el'] = None
+                cost_per_mi_feature['properties']['$_mi_fuel'] = None
                 cost_per_mi_feature['properties']['$_mi_lab'] = None
                 cost_per_mi_feature['properties']['$_mi_op'] = None
             else:
                 costs_per_mile = get_costs_per_mile(electricity_rate_feature['properties']['Cents_kWh'], demand_charge_feature['properties']['Average Ma'], average_payload, average_VMT, max_charging_power)
                 cost_per_mi_feature['properties']['$_mi_tot'] = costs_per_mile['TCO ($/mi)']
                 cost_per_mi_feature['properties']['$_mi_cap'] = costs_per_mile['Total capital ($/mi)']
-                cost_per_mi_feature['properties']['$_mi_el'] = costs_per_mile['Total electricity ($/mi)']
+                cost_per_mi_feature['properties']['$_mi_fuel'] = costs_per_mile['Total fuel ($/mi)']
                 cost_per_mi_feature['properties']['$_mi_lab'] = costs_per_mile['Total labor ($/mi)']
                 cost_per_mi_feature['properties']['$_mi_op'] = costs_per_mile['Other OPEXs ($/mi)']
 
@@ -263,7 +266,7 @@ def main():
     grid_intensity_geojson_ba = collect_grid_intensity_geo('ba')
     grid_intensity_geojson_state = collect_grid_intensity_geo('state')
     
-    electricity_rates_geojson, demand_charges_geojson = collect_cost_geos()
+    electricity_rates_geojson, demand_charges_geojson, diesel_prices_geojson = collect_cost_geos()
     
     average_payloads = [0, 10000, 20000, 30000, 40000, 50000]
     average_VMTs = [40000, 70000, 100000, 130000, 160000, 190000]
@@ -294,13 +297,29 @@ def main():
                 print(f'Generated an exception: {exc} for payload: {average_payload}, VMT: {average_VMT}')
         """
                 
-        # Evaluate costs in parallel
+        # Evaluate EV trucking costs in parallel
         for average_payload in average_payloads:
             for average_VMT in average_VMTs:
                 for max_charging_power in max_charging_powers:
                     # Submit each combination of tasks to be executed in parallel
                     future_costs = executor.submit(parallel_make_costs, average_payload, average_VMT, max_charging_power, electricity_rates_geojson, demand_charges_geojson)
                     futures_costs[future_costs] = (average_payload, average_VMT, max_charging_power)
+                
+        # Wait for the costs futures to complete and handle them if necessary
+        for future_costs in as_completed(futures_costs):
+            # You can add error handling or results processing here
+            average_payload, average_VMT, max_charging_power = futures_costs[future_costs]
+            try:
+                result = future_costs.result()
+                # Process result if needed
+            except Exception as exc:
+                print(f'Generated an exception: {exc} for payload: {average_payload}, VMT: {average_VMT}, max charging power: {max_charging_power}')
+                
+        # Evaluate diesel trucking costs in parallel
+        for average_payload in average_payloads:
+            # Submit each combination of tasks to be executed in parallel
+            future_costs = executor.submit(parallel_make_costs, average_payload, average_VMT, max_charging_power, electricity_rates_geojson, demand_charges_geojson)
+            futures_costs[future_costs] = (average_payload, average_VMT, max_charging_power)
                 
         # Wait for the costs futures to complete and handle them if necessary
         for future_costs in as_completed(futures_costs):

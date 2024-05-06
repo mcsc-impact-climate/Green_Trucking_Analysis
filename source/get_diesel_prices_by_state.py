@@ -28,57 +28,57 @@ padd_name_dict = {
 }
 
 state_padd_dict = {
-    'Connecticut': 'New England',
-    'Maine': 'New England',
-    'Massachusetts': 'New England',
-    'New Hampshire': 'New England',
-    'Rhode Island': 'New England',
-    'Vermont': 'New England',
-    'Delaware': 'Central Atlantic',
-    'District of Columbia': 'Central Atlantic',
-    'Maryland': 'Central Atlantic',
-    'New Jersey': 'Central Atlantic',
-    'New York': 'Central Atlantic',
-    'Pennsylvania': 'Central Atlantic',
-    'Florida': 'Lower Atlantic',
-    'Georgia': 'Lower Atlantic',
-    'North Carolina': 'Lower Atlantic',
-    'South Carolina': 'Lower Atlantic',
-    'Virginia': 'Lower Atlantic',
-    'West Virginia': 'Lower Atlantic',
-    'Illinois': 'Midwest',
-    'Indiana': 'Midwest',
-    'Iowa': 'Midwest',
-    'Kansas': 'Midwest',
-    'Kentucky': 'Midwest',
-    'Michigan': 'Midwest',
-    'Minnesota': 'Midwest',
-    'Missouri': 'Midwest',
-    'Nebraska': 'Midwest',
-    'North Dakota': 'Midwest',
-    'Ohio': 'Midwest',
-    'Oklahoma': 'Midwest',
-    'South Dakota': 'Midwest',
-    'Tennessee': 'Midwest',
-    'Wisconsin': 'Midwest',
-    'Alabama': 'Gulf Coast',
-    'Arkansas': 'Gulf Coast',
-    'Louisiana': 'Gulf Coast',
-    'Mississippi': 'Gulf Coast',
-    'New Mexico': 'Gulf Coast',
-    'Texas': 'Gulf Coast',
-    'Colorado': 'Rocky Mountain',
-    'Idaho': 'Rocky Mountain',
-    'Montana': 'Rocky Mountain',
-    'Utah': 'Rocky Mountain',
-    'Wyoming': 'Rocky Mountain',
-    'Alaska': 'Rest of West Coast',
-    'Arizona': 'Rest of West Coast',
-    'California': 'California',
-    'Hawaii': 'Rest of West Coast',
-    'Nevada': 'Rest of West Coast',
-    'Oregon': 'Rest of West Coast',
-    'Washington': 'Rest of West Coast'
+    'CT': 'New England',
+    'ME': 'New England',
+    'MA': 'New England',
+    'NH': 'New England',
+    'RI': 'New England',
+    'VT': 'New England',
+    'DE': 'Central Atlantic',
+    'DC': 'Central Atlantic',
+    'MD': 'Central Atlantic',
+    'NJ': 'Central Atlantic',
+    'NY': 'Central Atlantic',
+    'PA': 'Central Atlantic',
+    'FL': 'Lower Atlantic',
+    'GA': 'Lower Atlantic',
+    'NC': 'Lower Atlantic',
+    'SC': 'Lower Atlantic',
+    'VA': 'Lower Atlantic',
+    'WV': 'Lower Atlantic',
+    'IL': 'Midwest',
+    'IN': 'Midwest',
+    'IA': 'Midwest',
+    'KS': 'Midwest',
+    'KY': 'Midwest',
+    'MI': 'Midwest',
+    'MN': 'Midwest',
+    'MO': 'Midwest',
+    'NE': 'Midwest',
+    'ND': 'Midwest',
+    'OH': 'Midwest',
+    'OK': 'Midwest',
+    'SD': 'Midwest',
+    'TN': 'Midwest',
+    'WI': 'Midwest',
+    'AL': 'Gulf Coast',
+    'AR': 'Gulf Coast',
+    'LA': 'Gulf Coast',
+    'MS': 'Gulf Coast',
+    'NM': 'Gulf Coast',
+    'TX': 'Gulf Coast',
+    'CO': 'Rocky Mountain',
+    'ID': 'Rocky Mountain',
+    'MT': 'Rocky Mountain',
+    'UT': 'Rocky Mountain',
+    'WY': 'Rocky Mountain',
+    'AK': 'Rest of West Coast',
+    'AZ': 'Rest of West Coast',
+    'CA': 'California',
+    'HI': 'Rest of West Coast',
+    'NV': 'Rest of West Coast',
+    'OR': 'Rest of West Coast',
+    'WA': 'Rest of West Coast'
 }
 
 def read_state_data(discountrate):
@@ -145,52 +145,6 @@ def read_state_data(discountrate):
     
     return state_padd_df
     
-def merge_state_shapefile(data_df, shapefile_path):
-    '''
-    Merges the shapefile containing state boundaries with the dataframe containing the  diesel prices by state
-
-    Parameters
-    ----------
-    data_df (pd.DataFrame): A pandas dataframe containing the subregion names and emissions data for each subregion
-
-    shapefile_path (string): Path to the shapefile to be joined with the dataframe
-
-    Returns
-    -------
-    merged_Dataframe (pd.DataFrame): Joined dataframe
-    '''
-    shapefile = gpd.read_file(shapefile_path)
-    shapefile = shapefile.filter(['STUSPS', 'Shape_Area', 'geometry'], axis=1)
-    
-    # Merge the dataframes based on the subregion name
-    merged_dataframe = shapefile.merge(data_df, on='STUSPS', how='left')
-                
-    return merged_dataframe
-    
-def saveShapefile(file, name):
-    '''
-    Saves a pandas dataframe as a shapefile
-
-    Parameters
-    ----------
-    file (pd.DataFrame): Dataframe to be saved as a shapefile
-
-    name (string): Filename to the shapefile save to (must end in .shp)
-
-    Returns
-    -------
-    None
-    '''
-    # Make sure the filename ends in .shp
-    if not name.endswith('.shp'):
-        print("ERROR: Filename for shapefile must end in '.shp'. File will not be saved.")
-        exit()
-    # Make sure the full directory path to save to exists, otherwise create it
-    dir = os.path.dirname(name)
-    if not os.path.exists(dir):
-        os.makedirs(dir)
-    file.to_file(name)
-    
 
 def main():
 
@@ -203,15 +157,6 @@ def main():
     
     # Save to a csv file
     state_diesel_prices_df.to_csv('tables/average_diesel_price_by_state.csv')
-    
-    # Rename the 'State' column to match the shapefile with state boundaries
-    state_diesel_prices_df = state_diesel_prices_df.rename(columns={'State': 'STUSPS'})
-    
-    # Merge with the shapefile containing state boundaries and save
-    state_diesel_prices_gdf = merge_state_shapefile(state_diesel_prices_df, f'data/state_boundaries/tl_2012_us_state.shp')
-    
-    # Save the merged shapefile
-    saveShapefile(state_diesel_prices_gdf, f'data/diesel_price_by_state/diesel_price_by_state.shp')
 
 if __name__ == '__main__':
     main()
