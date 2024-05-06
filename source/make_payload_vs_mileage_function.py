@@ -23,7 +23,6 @@ def main():
     # Read in the evaluated payload vs. mileage for the Tesla Semi
     payload_vs_mileage_df = pd.read_csv('tables/payload_vs_mileage_semi.csv')
     
-    
     # Read in battery parameters
     battery_params_dict = data_collection_tools.read_battery_params()
     
@@ -61,7 +60,7 @@ def main():
     plt.plot(x_plot, slope * x_plot + b, color='blue', label=best_fit_line, linewidth=2)
     ax.fill_between(x_plot, (slope+slope_unc)*x_plot + b + b_unc, (slope-slope_unc)*x_plot + b - b_unc, color='blue', alpha=0.3)
         
-    ax.set_xlim(0, xmax)
+    ax.set_xlim(0, 60000)
     ax.set_ylim(b-b_unc-0.01, ymax)
     ax.fill_betweenx(np.linspace(b-b_unc-0.01, ymax, 10), payload_GVW_max, xmax, color='red', alpha=0.3, label='GVW > 82,000 lb')
     

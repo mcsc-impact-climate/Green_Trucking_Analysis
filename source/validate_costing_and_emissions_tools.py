@@ -1,5 +1,8 @@
+
+
+
 """
-Date: April 1, 2024
+Date: May 5, 2024
 Purpose: Code to validate functionality encoded in costing_and_emissions_tools and emissions_tools
 """
 
@@ -8,6 +11,7 @@ import emissions_tools
 import data_collection_tools
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
 
 G_PER_LB = 453.592
 KWH_PER_MWH = 1000
@@ -79,9 +83,6 @@ def plot_electricity_cost_by_year(electricity_cost_df, identifier_str=None):
 def main():
     # Set default values for variable parameters
     m_payload_lb = 50000                        # lb
-    demand_charge = 10                          # $/kW
-    grid_emission_intensity = 200               # Present grid emission intensity, in g CO2 / kWh
-    electricity_charge = 0.15                   # cents/kW
     average_VMT = 85000                         # miles/year
     charging_power = 750                        # Max charging power, in kW
     
@@ -106,8 +107,9 @@ def main():
     emission_intensity_g_per_kWh = emission_intensity_lb_per_MWh * G_PER_LB / KWH_PER_MWH
     emissions_tools.emission(parameters).plot_CI_grid_projection(scenario='Present', grid_intensity_start=emission_intensity_g_per_kWh, start_year=2020, label='WECC California', label_save='CAMX')
 
+    
     # Make a quick validation plot for lifecycle emissions
-    emissions = costing_and_emissions_tools.evaluate_emissions(m_payload_lb, grid_emission_intensity)
+    emissions = costing_and_emissions_tools.evaluate_emissions(m_payload_lb, emission_intensity_lb_per_MWh)
     
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.tick_params(axis='both', which='major', labelsize=15)
@@ -115,14 +117,27 @@ def main():
     ax.bar(range(len(emissions)), emissions.values(), tick_label=['Manufacturing', 'Grid', 'Total'])
     plt.savefig('plots/lifecycle_emissions_validation.png')
     
-    # Make a quick validation plot for lifecycle costs
-    costs = costing_and_emissions_tools.evaluate_costs(m_payload_lb, electricity_charge, demand_charge)
+    # Make a quick validation plot for lifecycle costs of EV trucking
+    costs = costing_and_emissions_tools.evaluate_costs(m_payload_lb, electricity_rate_CA, demand_charge_CA, charging_power = charging_power)
     
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.tick_params(axis='both', which='major', labelsize=15)
     ax.set_ylabel('Lifecycle costs ($ / mile)', fontsize=18)
     ax.bar(range(len(costs)), costs.values(), tick_label=['Capital', 'Operating', 'Electricity', 'Labor', 'Other OPEX', 'Total'])
     plt.savefig('plots/lifecycle_costs_validation.png')
+    
+    # Make a quick validation plot for lifecycle costs of diesel trucking in California
+    diesel_price_df = pd.read_csv('tables/average_diesel_price_by_state.csv').set_index('State')
+    diesel_price_CA = diesel_price_df['Average Price ($/gal)'].loc['California']
+    
+    costs = costing_and_emissions_tools.evaluate_costs_diesel(m_payload_lb, diesel_price = diesel_price_CA)
+        
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.tick_params(axis='both', which='major', labelsize=15)
+    ax.set_ylabel('Lifecycle costs ($ / mile)', fontsize=18)
+    ax.bar(range(len(costs)), costs.values(), tick_label=['Capital', 'Operating', 'Fuel', 'Labor', 'Other OPEX', 'Total'])
+    plt.savefig('plots/lifecycle_costs_validation_diesel.png')
+    
 
 if __name__ == '__main__':
     main()

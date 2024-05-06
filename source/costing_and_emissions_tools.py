@@ -12,9 +12,10 @@ This code was originally written by Kariana Moreno Sader and Sayandeep Biswas, w
 # Import packages
 import pandas as pd
 import numpy as np
+import math
 from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
-import truck_model_tools
 import costing_tools
+import costing_tools_diesel
 import emissions_tools
 import data_collection_tools
 from datetime import datetime
@@ -111,6 +112,28 @@ def get_mileage(m_payload, f_linear_params = 'tables/payload_vs_mileage_best_fit
     mileage_unc = slope_unc * m_payload + b_unc
     
     return mileage, mileage_unc
+    
+"""
+Function: Gets the mileage for a diesel truck given an input payload
+Inputs:
+    - payload (float): Typical payload that the truck carries, in lb
+    - f_linear_params (string): Path to a csv file containing the linear slope and y-intersect (along with uncertainties) for gal/miles vs. payload
+"""
+def get_mileage_diesel(m_payload, f_linear_params = 'tables/payload_vs_mileage_linear_coefs_diesel.csv'):
+    payload_vs_mileage_params_df = pd.read_csv(f_linear_params)
+    slope = payload_vs_mileage_params_df['slope (gal/mile/kiloton)'].iloc[0]
+    slope_unc = payload_vs_mileage_params_df['slope unc (gal/mile/kiloton)'].iloc[0]
+    b = payload_vs_mileage_params_df['b (gal/mile)'].iloc[0]
+    b_unc = payload_vs_mileage_params_df['b unc (gal/mile)'].iloc[0]
+    
+    mileage = 1/(slope * m_payload + b)
+    
+    # Evaluate the uncertainty using the partial derivative rule
+    d_mileage_d_slope = m_payload / (slope * m_payload + b)**2
+    d_mileage_d_b = 1 / (slope * m_payload + b)**2
+    mileage_unc = math.sqrt((d_mileage_d_slope * slope_unc)**2 + (d_mileage_d_b * b_unc)**2)
+        
+    return mileage, mileage_unc
 
 """
 Function: Collects the VIUS payload distribution for class 8 semis and scales it to have the given average payload
@@ -154,30 +177,29 @@ def get_electricity_cost_by_year(parameters, mileage, demand_charge, electricity
     return electricity_cost_df
     
 """
-Function: Reads in and evaluates specs and performance parameters for the truck
+Function: Reads in and evaluates specs and performance parameters for the EV truck
 Inputs:
     - m_payload_lb (float): Payload carried by the truck, in lb
     - truck_type (string): String identifier for truck specs
     - battery_chemistry (string): Battery chemistry (either NMC or LFP)
     - e_bat (float): Energy capacity of the truck battery, in kWh
     - m_truck_max_lb (float): Maximum allowable GVW of the truck (82000lb for EVs in California)
-    - scenario (string): Time scenario (Present, Mid term or Long term)
 """
-def get_vehicle_model_results(m_payload_lb, average_VMT, truck_type='semi', battery_chemistry='NMC', e_bat=825, m_truck_max_lb=82000, scenario='Present'):
+def get_vehicle_model_results(m_payload_lb, average_VMT, truck_type='semi', battery_chemistry='NMC', e_bat=825, m_truck_max_lb=82000):
 
     # Read in parameters for the given truck type
     parameters = data_collection_tools.read_parameters(truck_params = truck_type, vmt_params = 'daycab_vmt_vius_2021')
     
     parameters.VMT['VMT (miles)'] = get_VMT_distribution(parameters.VMT['VMT (miles)'], average_VMT)
     
-    # Read in data for the chosen scenario
-    scenario_data = data_collection_tools.read_scenario_data(scenario=scenario, chemistry=battery_chemistry)
+    # Read in battery info data
+    battery_info_df = pd.read_csv('data/default_battery_params.csv', index_col=0)
 
     # Get the mileage and uncertainty for the given payload
     mileage, mileage_unc = get_mileage(m_payload_lb, f_linear_params = 'tables/payload_vs_mileage_best_fit_params.csv')
     
     # Calculate the masses of the battery and truck, given the input battery capacity and energy density
-    e_density = scenario_data['Energy Density (kWh/ton)']
+    e_density = battery_info_df['Value'].loc[f'{battery_chemistry} battery energy density']   # kWh/ton
     m_truck_max_kg = m_truck_max_lb * KG_PER_LB
     m_bat_kg = e_bat / e_density * KG_PER_TON          # Battery mass, in kg
     m_bat_lb = m_bat_kg / KG_PER_LB
@@ -202,6 +224,33 @@ def get_vehicle_model_results(m_payload_lb, average_VMT, truck_type='semi', batt
     return parameters, vehicle_model_results_dict
     
 """
+Function: Reads in and evaluates specs and performance parameters for the diesel truck
+Inputs:
+    - m_payload_lb (float): Payload carried by the truck, in lb
+    - truck_type (string): String identifier for truck specs
+    - m_truck_max_lb (float): Maximum allowable GVW of the truck (82000lb for EVs in California)
+"""
+def get_vehicle_model_results_diesel(m_payload_lb, average_VMT, truck_type='diesel_daycab', m_truck_max_lb=80000):
+
+    # Read in parameters for the given truck type
+    parameters = data_collection_tools.read_parameters(truck_params = truck_type, vmt_params = 'daycab_vmt_vius_2021', truck_type='diesel')
+    
+    parameters.VMT['VMT (miles)'] = get_VMT_distribution(parameters.VMT['VMT (miles)'], average_VMT)
+
+    # Get the mileage and uncertainty for the given payload
+    mileage, mileage_unc = get_mileage_diesel(m_payload_lb, f_linear_params = 'tables/payload_vs_mileage_linear_coefs_diesel.csv')
+    
+    # Calculate the GVW of the truck, including payload and tractors
+    m_gvw_lb = m_payload_lb + parameters.m_truck / KG_PER_LB
+    
+    vehicle_model_results_dict = {
+        'Fuel economy (miles/gal)': mileage,
+        'Total vehicle mass (lbs)': m_gvw_lb
+    }
+    
+    return parameters, vehicle_model_results_dict
+    
+"""
 Function: Calculates lifecycle GHG emissions of the truck per mile driven, accounting for battery manufacturing and grid electricity production
 Inputs:
     - m_payload_lb (float): Payload carried by the truck, in lb
@@ -209,17 +258,13 @@ Inputs:
     - battery_chemistry (string): Battery chemistry (either NMC or LFP)
     - e_bat (float): Energy capacity of the truck battery, in kWh
     - m_truck_max_lb (float): Maximum allowable GVW of the truck (82000lb for EVs in California)
-    - scenario (string): Time scenario (Present, Mid term or Long term)
 """
-def evaluate_emissions(m_payload_lb, grid_emission_intensity, average_VMT=85000, grid_emission_intensity_year=2020, e_bat=825, battery_chemistry='NMC', m_truck_max_lb=82000, scenario='Present'):
+def evaluate_emissions(m_payload_lb, grid_emission_intensity, average_VMT=85000, grid_emission_intensity_year=2020, e_bat=825, battery_chemistry='NMC', m_truck_max_lb=82000):
     
     # Evaluate parameters and vehicle model results for the given payload
     parameters, vehicle_model_results_dict = get_vehicle_model_results(m_payload_lb, average_VMT)
     
     calculate_replacements(parameters.VMT['VMT (miles)'], vehicle_model_results_dict['Fuel economy (kWh/mi)'], e_bat=825, max_battery_cycles=1000)
-    
-    # Read in data for the chosen scenario
-    scenario_data = data_collection_tools.read_scenario_data(scenario=scenario, chemistry=battery_chemistry)
     
     # Read in battery parameters
     battery_params_dict = data_collection_tools.read_battery_params(chemistry=battery_chemistry)
@@ -255,20 +300,19 @@ Function: Calculates lifecycle costs of purchasing and operating per mile driven
     - Electricity
 Inputs:
     - m_payload_lb (float): Payload carried by the truck, in lb
-    - grid_emission_intensity (float): Emission intensity of the power grid (g CO2 / kWh)
     - battery_chemistry (string): Battery chemistry (either NMC or LFP)
     - e_bat (float): Energy capacity of the truck battery, in kWh
     - m_truck_max_lb (float): Maximum allowable GVW of the truck (82000lb for EVs in California)
     - vehicle_purchase_price (float): Purchase price of the vehicle. Defaults to the inferred estimated price of $250,000 for the Tesla Semi, based on reports that PepsiCo purchased 18 Semis with $4.5 million in grants (https://www.sacbee.com/news/business/article274186280.html)
     - scenario (string): Time scenario (Present, Mid term or Long term)
 """
-def evaluate_costs(m_payload_lb, electricity_charge, demand_charge, average_VMT=85000, charging_power=750, e_bat=825, battery_chemistry='NMC', m_truck_max_lb=82000, vehicle_purchase_price=250000, scenario='Present'):
+def evaluate_costs(m_payload_lb, electricity_charge, demand_charge, average_VMT=85000, charging_power=750, e_bat=825, battery_chemistry='NMC', m_truck_max_lb=82000, vehicle_purchase_price=None):
     
     # Evaluate parameters and vehicle model results for the given payload
     parameters, vehicle_model_results_dict = get_vehicle_model_results(m_payload_lb, average_VMT)
     
-    # Read in data for the chosen scenario
-    scenario_data = data_collection_tools.read_scenario_data(scenario=scenario, chemistry=battery_chemistry)
+    # Read in costing data for the EV truck
+    truck_cost_data = data_collection_tools.read_truck_cost_data(truck_type='EV')
     
     # Read in battery parameters
     battery_params_dict = data_collection_tools.read_battery_params(chemistry=battery_chemistry)
@@ -280,6 +324,38 @@ def evaluate_costs(m_payload_lb, electricity_charge, demand_charge, average_VMT=
     electricity_cost_df = get_electricity_cost_by_year(parameters, vehicle_model_results_dict['Fuel economy (kWh/mi)'], demand_charge, electricity_charge, charging_power)
 
     # Calculate TCO per mile
-    TCO = costing_tools.cost(parameters).get_TCO(vehicle_model_results_dict, scenario_data['Capital Costs ($/kW)'], scenario_data['Battery Unit Cost ($/kWh)'], scenario_data['Operating Costs ($/mi)'], electricity_cost_df['Total'], battery_params_dict['Replacements'], vehicle_purchase_price = vehicle_purchase_price)
+    TCO = costing_tools.cost(parameters).get_TCO(vehicle_model_results_dict, truck_cost_data['Capital Costs'], truck_cost_data['Battery Unit Cost ($/kWh)'], truck_cost_data['Operating Costs'], electricity_cost_df['Total'], battery_params_dict['Replacements'], vehicle_purchase_price = vehicle_purchase_price)
     
     return TCO
+
+
+"""
+Function: Calculates lifecycle costs of purchasing and operating a conventional diesel truck per mile driven. Costs account for:
+    - Truck purchase (capital)
+    - Operating costs (maintenance & repair, insurance, misc)
+    - Labor
+    - Fuel
+Inputs:
+    - m_payload_lb (float): Payload carried by the truck, in lb
+    - m_truck_max_lb (float): Maximum allowable GVW of the truck (80000lb for diesel)
+    - scenario (string): Time scenario (Present, Mid term or Long term)
+"""
+def evaluate_costs_diesel(m_payload_lb, average_VMT=85000, diesel_price=3.67, m_truck_max_lb=80000, vehicle_purchase_price=None):
+    
+    # Evaluate parameters and vehicle model results for the given payload
+    parameters, vehicle_model_results_dict = get_vehicle_model_results_diesel(m_payload_lb, average_VMT)
+    
+    # Read in costing data for the diesel truck
+    truck_cost_data = data_collection_tools.read_truck_cost_data(truck_type='diesel')
+
+    # Calculate TCO per mile
+    TCO = costing_tools_diesel.cost(parameters).get_TCO(vehicle_model_results_dict, truck_cost_data['Capital Costs'], truck_cost_data['Operating Costs'], diesel_price)
+    
+    return TCO
+
+
+######## Basic code to test functions ########
+#print(get_mileage_diesel(60000))
+#print(get_vehicle_model_results_diesel(60000, 100000))
+#print(evaluate_costs(60000, 0.20, 5))
+#print(evaluate_costs_diesel(60000))

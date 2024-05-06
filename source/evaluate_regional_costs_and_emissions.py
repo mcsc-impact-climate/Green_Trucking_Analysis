@@ -120,7 +120,7 @@ def get_costs_per_mile(electricity_rate_cents, demand_charge, average_payload = 
     return cost_per_mi_df
 
 """
-Function: Plots lifecycle costs per mile, broken down into components
+Function: Plots lifecycle costs per mile for EV trucking, broken down into components
 Inputs:
     - costs_per_mi_geojson (geojson): Geojson object containing cost per mile components and boundaries for each state
     - states (list): List containing the states for which to plot cost per mile breakdowns
@@ -182,13 +182,48 @@ def collect_cost_geos():
     return electricity_rates_geojson, demand_charges_geojson
 
 """
-Function: Loop through all states to evaluate the costs per mile using the state-level electriity price and demand charge
+Function: Loop through all states to evaluate the costs per mile for EV trucking using the state-level electricity price and demand charge
 Inputs:
     - average_payload (float): Average payload of shipments carried by the truck
     - average_VMT (float): Average annual miles traveled over the truck's lifetime
 Note: The state features in the electricity rate and demand charge geojsons are in the same order because they're both derived from the same base shapefile
 """
 def make_costs_per_mi_geo(average_payload, average_VMT, max_charging_power, electricity_rates_geojson, demand_charges_geojson):
+    costs_per_mi_geojson = copy.deepcopy(electricity_rates_geojson)
+    for electricity_rate_feature, demand_charge_feature, cost_per_mi_feature in zip(electricity_rates_geojson['features'], demand_charges_geojson['features'], costs_per_mi_geojson['features']):
+        # Check if the 'STUSPS' field (state abbreviation) exists in the properties
+        if 'Cents_kWh' in electricity_rate_feature['properties'] and 'Average Ma' in demand_charge_feature['properties']:
+
+            del cost_per_mi_feature['properties']['Cents_kWh']
+
+            if electricity_rate_feature['properties']['Cents_kWh'] is None or demand_charge_feature['properties']['Average Ma'] is None:
+                cost_per_mi_feature['properties']['$_mi_tot'] = None
+                cost_per_mi_feature['properties']['$_mi_cap'] = None
+                cost_per_mi_feature['properties']['$_mi_el'] = None
+                cost_per_mi_feature['properties']['$_mi_lab'] = None
+                cost_per_mi_feature['properties']['$_mi_op'] = None
+            else:
+                costs_per_mile = get_costs_per_mile(electricity_rate_feature['properties']['Cents_kWh'], demand_charge_feature['properties']['Average Ma'], average_payload, average_VMT, max_charging_power)
+                cost_per_mi_feature['properties']['$_mi_tot'] = costs_per_mile['TCO ($/mi)']
+                cost_per_mi_feature['properties']['$_mi_cap'] = costs_per_mile['Total capital ($/mi)']
+                cost_per_mi_feature['properties']['$_mi_el'] = costs_per_mile['Total electricity ($/mi)']
+                cost_per_mi_feature['properties']['$_mi_lab'] = costs_per_mile['Total labor ($/mi)']
+                cost_per_mi_feature['properties']['$_mi_op'] = costs_per_mile['Other OPEXs ($/mi)']
+
+    with open(f'geojsons/costs_per_mile_payload{average_payload}_avVMT{average_VMT}_maxChP{max_charging_power}.geojson', mode='w') as cost_geojson:
+        json.dump(costs_per_mi_geojson, cost_geojson, indent=4)
+        
+    ## Plot cost/mile breakdown for a few sample states
+    #plot_costs_per_mile_breakdown(costs_per_mi_geojson)
+    
+"""
+Function: Loop through all states to evaluate the costs per mile for diesel trucking using the state-level electricity price and demand charge
+Inputs:
+    - average_payload (float): Average payload of shipments carried by the truck
+    - average_VMT (float): Average annual miles traveled over the truck's lifetime
+Note: The state features in the electricity rate and demand charge geojsons are in the same order because they're both derived from the same base shapefile
+"""
+def make_costs_per_mi_diesel_geo(average_payload, average_VMT, electricity_rates_geojson, demand_charges_geojson):
     costs_per_mi_geojson = copy.deepcopy(electricity_rates_geojson)
     for electricity_rate_feature, demand_charge_feature, cost_per_mi_feature in zip(electricity_rates_geojson['features'], demand_charges_geojson['features'], costs_per_mi_geojson['features']):
         # Check if the 'STUSPS' field (state abbreviation) exists in the properties

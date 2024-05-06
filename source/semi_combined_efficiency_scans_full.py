@@ -47,7 +47,7 @@ eta_battery_NMC = df_battery_data['Value'].loc['NMC roundtrip efficiency']   # h
 
 ############################# Evaluate model parameters for Tesla drivecycles #############################
 # Set the drag coefficient to the reported value for the Tesla semi
-parameters.cd = 0.22   # Source: https://eightify.app/summary/technology-and-innovation/elon-musk-unveils-tesla-semi-impressive-aerodynamic-design-long-range-efficient-charging
+parameters.cd = 0.36   # Source: https://www.notateslaapp.com/tesla-reference/963/everything-we-know-about-the-tesla-semi
 parameters.a_cabin = 10.7  # Source: https://www.motormatchup.com/catalog/Tesla/Semi-Truck/2022/Empty
 parameters.p_motor_max = 942900   # Source: https://www.motormatchup.com/catalog/Tesla/Semi-Truck/2022/Empty
 parameters.cr = 0.0044

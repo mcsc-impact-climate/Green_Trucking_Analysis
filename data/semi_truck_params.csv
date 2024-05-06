@@ -1,18 +1,18 @@
 Parameter,Value,Units,Source
 Average payload,18811.82,kg,VIUS 2002
-Max gross vehicle weight,37194.574,kg,VIUS 2002
-Diesel tractor weight,19500,lb,
+Max gross vehicle weight,37194.574,kg,
+Diesel tractor weight,17000,lb,
 Engine weight,3500,lb,https://pubs.acs.org/doi/suppl/10.1021/acs.est.1c01273/suppl_file/es1c01273_si_001.pdf
 Fuel system weight,500,lb,https://pubs.acs.org/doi/suppl/10.1021/acs.est.1c01273/suppl_file/es1c01273_si_001.pdf
 Emission control system weight,550,lb,https://pubs.acs.org/doi/suppl/10.1021/acs.est.1c01273/suppl_file/es1c01273_si_001.pdf
 "Weight of motor, inverter, electronics",880,lb,https://www.transportenvironment.org/wp-content/uploads/2021/07/20180725_T&E_Battery_Electric_Trucks_EU_FINAL.pdf
 Auxiliary power,10000,W,
-Max motor power,942900,W,Model catalogue
-Drag coefficient,0.22,,
-Resistance coefficient,0.0044,,
+Max motor power,942900,W,https://www.motormatchup.com/catalog/Tesla/Semi-Truck/2022/Empty
+Drag coefficient,0.36,,https://www.notateslaapp.com/tesla-reference/963/everything-we-know-about-the-tesla-semi
+Resistance coefficient,0.0044,,Best value from https://www.lrrb.org/pdf/201539.pdf
 Frontal cabin area,10.7,m^2,
-Inverter efficiency,0.95,,
-Motor efficiency,0.9,,
-Gear efficiency,0.97,,
+Inverter efficiency,0.98,,
+Motor efficiency,0.95,,
+Gear efficiency,1,,
 Regenerative braking efficiency,0.8,,
 Depth of discharge,0.8,,

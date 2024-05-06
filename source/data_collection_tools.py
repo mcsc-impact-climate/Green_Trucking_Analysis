@@ -6,13 +6,17 @@ Note: Code adapted by Danika MacDonell from a colab notebook written by Kariana 
 
 import pandas as pd
 import truck_model_tools
+import truck_model_tools_diesel
 
 # Function to read in non-battery parameters for the truck model
-def read_parameters(truck_params='default', economy_params='default', vmt_params='default'):
+def read_parameters(truck_params='default', economy_params='default', vmt_params='default', truck_type='EV'):
     truck_params_str = f'data/{truck_params}_truck_params.csv'
     economy_params_str = f'data/{economy_params}_economy_params.csv'
     vmt_params_str = f'data/{vmt_params}_vmt.csv'
-    parameters = truck_model_tools.read_parameters(truck_params_str, economy_params_str, 'data/constants.csv', 'data/default_vmt.csv')
+    if truck_type == 'EV':
+        parameters = truck_model_tools.read_parameters(truck_params_str, economy_params_str, 'data/constants.csv', 'data/default_vmt.csv')
+    else:
+        parameters = truck_model_tools_diesel.read_parameters(truck_params_str, economy_params_str, 'data/constants.csv', 'data/default_vmt.csv')
     return parameters
 
 # Function to read in battery parameters for the truck model
@@ -29,24 +33,41 @@ def read_battery_params(battery_params='default', chemistry='NMC'):
     
     return battery_params_dict
     
-def read_scenario_data(scenario='Present', chemistry='NMC'):
-    df_scenarios = pd.read_csv('data/scenario_data.csv', index_col=0)
-    scenario_data_dict = {}
-    scenario_data_dict['Energy Density (kWh/ton)'] = float(df_scenarios[f'{chemistry} battery energy density'].loc[scenario])
-
-    scenario_data_dict['Capital Costs ($/kW)'] = {
-        'glider ($)': float(df_scenarios['Cost of glider'].loc[scenario]),
-        'motor and inverter ($/kW)': float(df_scenarios['Cost of motor and inverter'].loc[scenario]),
-        'DC-DC converter ($/kW)': float(df_scenarios['Cost of DC-DC converter'].loc[scenario])
-    }
-
-    scenario_data_dict['Operating Costs ($/mi)'] = {
-        'maintenance & repair ($/mi)': float(df_scenarios['Maintenance and repair cost'].loc[scenario]),
-        'labor ($/mi)': float(df_scenarios['Labor cost'].loc[scenario]),
-        'insurance ($/mi-$)': float(df_scenarios['Insurance cost'].loc[scenario]),
-        'misc ($/mi)': float(df_scenarios[' Miscellaneous costs'].loc[scenario])
-    }
+def read_truck_cost_data(truck = 'class_8_daycab', truck_type = 'EV', chemistry='NMC'):
+    df_truck_cost = pd.read_csv(f'data/{truck}_cost_data.csv', index_col=0)
     
-    scenario_data_dict['Battery Unit Cost ($/kWh)'] = float(df_scenarios[f'{chemistry} battery energy density'].loc[scenario])
+    truck_cost_data_dict = {}
     
-    return scenario_data_dict
+    if truck_type == 'EV':
+        truck_cost_data_dict['Capital Costs'] = {
+            'glider ($)': float(df_truck_cost['Value'].loc['Glider']),
+            'motor and inverter ($/kW)': float(df_truck_cost['Value'].loc['Motor and inverter']),
+            'DC-DC converter ($/kW)': float(df_truck_cost['Value'].loc['DC-DC converter'])
+            }
+        truck_cost_data_dict['Battery Unit Cost ($/kWh)'] = float(df_truck_cost['Value'].loc[f'{chemistry} battery'])
+    elif truck_type == 'diesel' or truck_type == 'Diesel':
+        truck_cost_data_dict['Capital Costs'] = {
+            'glider ($)': float(df_truck_cost['Value'].loc['Glider']),
+            'aftertreatment ($)': float(df_truck_cost['Value'].loc['Aftertreatment']),
+            'engine ($/kW)': float(df_truck_cost['Value'].loc['Engine']),
+            'transmission ($)': float(df_truck_cost['Value'].loc['Transmission']),
+            'fuel tank ($)': float(df_truck_cost['Value'].loc['Fuel tank']),
+            'WHR system ($)': float(df_truck_cost['Value'].loc['WHR system']),
+            }
+    else:
+        print(f'Error: No info for truck type {truck_type}')
+    
+    truck_cost_data_dict['Operating Costs'] = {
+        'maintenance & repair ($/mi)': float(df_truck_cost['Value'].loc['Maintenance and repair']),
+        'labor ($/mi)': float(df_truck_cost['Value'].loc['Labor']),
+        'insurance ($/mi-$)': float(df_truck_cost['Value'].loc['Insurance']),
+        'tolls ($/mi)': float(df_truck_cost['Value'].loc['Tolls']),
+        'permits and licenses ($/mi)': float(df_truck_cost['Value'].loc['Permits and licenses'])
+        }
+    
+    return truck_cost_data_dict
+    
+    
+# Basic code to test the functions defined above
+#print(read_truck_cost_data(truck_type='diesel'))
+    

@@ -1,0 +1,17 @@
+Cost,Value,Units,Powertrain type,Source
+Glider,95000,$,All,https://journals.sagepub.com/eprint/SYQUFKQNQIKSATCPDXCW/full
+Labor,0.69,$/mile,All,https://journals.sagepub.com/eprint/SYQUFKQNQIKSATCPDXCW/full
+Tolls,0.03,$/mile,All,https://journals.sagepub.com/eprint/SYQUFKQNQIKSATCPDXCW/full
+Permits and licenses,0.02,$/mile,All,https://journals.sagepub.com/eprint/SYQUFKQNQIKSATCPDXCW/full
+Maintenance and repair,0.14,$/mile,All,https://journals.sagepub.com/eprint/SYQUFKQNQIKSATCPDXCW/full
+Insurance,0.198,$/mile,All,https://chemrxiv.org/engage/api-gateway/chemrxiv/assets/orp/resource/item/656e4691cf8b3c3cd7c96810/original/battery-electric-long-haul-trucking-in-the-united-states-a-comprehensive-costing-and-emissions-analysis.pdf
+Motor and inverter,77,$/kW,EV,https://theicct.org/wp-content/uploads/2023/03/cost-zero-emission-trucks-us-phase-3-mar23.pdf
+DC-DC converter,90,$/kW,EV,https://theicct.org/wp-content/uploads/2022/01/Final-Report-eTruck-Virtual-Teardown-Public-Version.pdf
+LFP battery,100,$/kWh,EV,https://www.sciencedirect.com/science/article/pii/S2352152X21015565
+NMC battery,137,$/kWh,EV,https://pubs.rsc.org/en/content/articlelanding/2021/ee/d1ee01530c
+Engine,34.62,$/kW,Diesel, https://publications.anl.gov/anlpubs/2021/02/165815.pdf
+Transmission,10250,$,Diesel,https://doi.org/10.1016/j.trd.2019.08.031
+Fuel tank,2100,"$, assuming a 350kg fuel tank at $6/kg",Diesel,https://theicct.org/sites/default/files/publications/Zero-emission-freight-trucks_ICCT-white-paper_26092017_vF.pdf
+Aftertreatment,5782,$,Diesel,https://journals.sagepub.com/eprint/SYQUFKQNQIKSATCPDXCW/full#bibr70-03611981231215672
+WHR system,5900,$,Diesel,https://theicct.org/sites/default/files/publications/HDV-Technology-Potential-and-Cost-Study_Ricardo_Consultant-Report_26052017_vF.pdf
+Insurance (diesel),0.07,$/mile,Diesel,https://journals.sagepub.com/eprint/SYQUFKQNQIKSATCPDXCW/full
