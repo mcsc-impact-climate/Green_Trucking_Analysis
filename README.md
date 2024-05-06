@@ -25,6 +25,11 @@ wget "https://fred.stlouisfed.org/graph/fredgraph.csv?bgcolor=%23e1e9f0&chart_ty
 # Historical diesel prices, from https://www.eia.gov/petroleum/gasdiesel/
 wget https://www.eia.gov/petroleum/gasdiesel/xls/psw18vwall.xls
 
+# Shapefile containing state boundaries, from https://www.sciencebase.gov/catalog
+wget "https://www.sciencebase.gov/catalog/file/get/52c78623e4b060b9ebca5be5?facet=tl_2012_us_state" -O state_boundaries.zip
+unzip state_boundaries.zip -d state_boundaries
+rm state_boundaries.zip
+
 cd ..
 ```
 
