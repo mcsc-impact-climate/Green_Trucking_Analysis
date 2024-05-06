@@ -340,7 +340,7 @@ Inputs:
     - m_truck_max_lb (float): Maximum allowable GVW of the truck (80000lb for diesel)
     - scenario (string): Time scenario (Present, Mid term or Long term)
 """
-def evaluate_costs_diesel(m_payload_lb, average_VMT=85000, diesel_price=3.67, m_truck_max_lb=80000, vehicle_purchase_price=None):
+def evaluate_costs_diesel(m_payload_lb, diesel_price=3.67, average_VMT=85000, m_truck_max_lb=80000, vehicle_purchase_price=None):
     
     # Evaluate parameters and vehicle model results for the given payload
     parameters, vehicle_model_results_dict = get_vehicle_model_results_diesel(m_payload_lb, average_VMT)

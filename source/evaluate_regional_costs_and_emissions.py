@@ -109,14 +109,28 @@ def make_emissions_per_mi_geo(average_payload, average_VMT, grid_intensity_geojs
 
 ##################################### Costs #####################################
 """
-Function: Evaluates the lifecycle emission rate for a given grid carbon intensity
+Function: Evaluates the lifecycle cost of EV trucking per mile, for a given set of costing inputs
 Inputs:
-    - lbCO2e_per_kWh (float): Grid emission intensity for the given region (lb CO2e / kWh)
+    - electricity_rate_cents (float): Electricity rate by state, in cents/kWh
+    - demand_charge (float): Average demand charge by state, in $/kW
     - average_payload (float): Average payload that the truck carries, in lb
+    - average_VMT (float): Average annual miles traveled over the truck's lifetime
+    - max_charging_power (float): Max power used by the truck's charger, in kW
 """
 def get_costs_per_mile(electricity_rate_cents, demand_charge, average_payload = DEFAULT_PAYLOAD, average_VMT=DEFAULT_AVG_VMT, max_charging_power=DEFAULT_CHARGING_POWER):
     electricity_rate_dollars = electricity_rate_cents / CENTS_PER_DOLLAR
     cost_per_mi_df = costing_and_emissions_tools.evaluate_costs(average_payload, electricity_rate_dollars, demand_charge=demand_charge, average_VMT=average_VMT, charging_power=max_charging_power)
+    return cost_per_mi_df
+    
+"""
+Function: Evaluates the lifecycle cost of diesel trucking per mile, for a given set of costing inputs
+Inputs:
+    - diesel_price (float): Average diesel price by state, in $/gal
+    - average_payload (float): Average payload that the truck carries, in lb
+    - average_VMT (float): Average annual miles traveled over the truck's lifetime
+"""
+def get_costs_per_mile_diesel(diesel_price, average_payload = DEFAULT_PAYLOAD, average_VMT=DEFAULT_AVG_VMT):
+    cost_per_mi_df = costing_and_emissions_tools.evaluate_costs_diesel(average_payload, diesel_price, average_VMT=average_VMT)
     return cost_per_mi_df
 
 """
@@ -191,27 +205,64 @@ Inputs:
     - average_VMT (float): Average annual miles traveled over the truck's lifetime
 Note: The state features in the electricity rate and demand charge geojsons are in the same order because they're both derived from the same base shapefile
 """
-def make_costs_per_mi_geo(average_payload, average_VMT, max_charging_power, electricity_rates_geojson, demand_charges_geojson):
+def make_costs_per_mi_geo(average_payload, average_VMT, max_charging_power, electricity_rates_geojson, demand_charges_geojson, diesel_prices_geojson):
     costs_per_mi_geojson = copy.deepcopy(electricity_rates_geojson)
-    for electricity_rate_feature, demand_charge_feature, cost_per_mi_feature in zip(electricity_rates_geojson['features'], demand_charges_geojson['features'], costs_per_mi_geojson['features']):
+    for electricity_rate_feature, demand_charge_feature, diesel_price_feature, cost_per_mi_feature in zip(electricity_rates_geojson['features'], demand_charges_geojson['features'], diesel_prices_geojson['features'], costs_per_mi_geojson['features'], ):
         # Check if the 'STUSPS' field (state abbreviation) exists in the properties
-        if 'Cents_kWh' in electricity_rate_feature['properties'] and 'Average Ma' in demand_charge_feature['properties']:
+        if 'Cents_kWh' in electricity_rate_feature['properties'] and 'Average Ma' in demand_charge_feature['properties'] and 'dies_price' in diesel_price_feature['properties']:
 
             del cost_per_mi_feature['properties']['Cents_kWh']
 
-            if electricity_rate_feature['properties']['Cents_kWh'] is None or demand_charge_feature['properties']['Average Ma'] is None:
+            if electricity_rate_feature['properties']['Cents_kWh'] is None or demand_charge_feature['properties']['Average Ma'] is None or diesel_price_feature['properties']['dies_price'] is None:
                 cost_per_mi_feature['properties']['$_mi_tot'] = None
                 cost_per_mi_feature['properties']['$_mi_cap'] = None
                 cost_per_mi_feature['properties']['$_mi_el'] = None
                 cost_per_mi_feature['properties']['$_mi_lab'] = None
                 cost_per_mi_feature['properties']['$_mi_op'] = None
+                
+                cost_per_mi_feature['properties']['dies_tot'] = None
+                cost_per_mi_feature['properties']['dies_cap'] = None
+                cost_per_mi_feature['properties']['dies_fu'] = None
+                cost_per_mi_feature['properties']['dies_lab'] = None
+                cost_per_mi_feature['properties']['dies_op'] = None
+                
+                cost_per_mi_feature['properties']['diff_tot'] = None
+                cost_per_mi_feature['properties']['diff_cap'] = None
+                cost_per_mi_feature['properties']['diff_fu'] = None
+                cost_per_mi_feature['properties']['diff_lab'] = None
+                cost_per_mi_feature['properties']['diff_op'] = None
+                
+                cost_per_mi_feature['properties']['perc_tot'] = None
+                cost_per_mi_feature['properties']['perc_cap'] = None
+                cost_per_mi_feature['properties']['perc_fu'] = None
+                cost_per_mi_feature['properties']['perc_lab'] = None
+                cost_per_mi_feature['properties']['perc_op'] = None
             else:
                 costs_per_mile = get_costs_per_mile(electricity_rate_feature['properties']['Cents_kWh'], demand_charge_feature['properties']['Average Ma'], average_payload, average_VMT, max_charging_power)
+                costs_per_mile_diesel = get_costs_per_mile_diesel(diesel_price_feature['properties']['dies_price'], average_payload, average_VMT)
                 cost_per_mi_feature['properties']['$_mi_tot'] = costs_per_mile['TCO ($/mi)']
                 cost_per_mi_feature['properties']['$_mi_cap'] = costs_per_mile['Total capital ($/mi)']
                 cost_per_mi_feature['properties']['$_mi_el'] = costs_per_mile['Total electricity ($/mi)']
                 cost_per_mi_feature['properties']['$_mi_lab'] = costs_per_mile['Total labor ($/mi)']
                 cost_per_mi_feature['properties']['$_mi_op'] = costs_per_mile['Other OPEXs ($/mi)']
+                
+                cost_per_mi_feature['properties']['dies_tot'] = costs_per_mile_diesel['TCO ($/mi)']
+                cost_per_mi_feature['properties']['dies_cap'] = costs_per_mile_diesel['Total capital ($/mi)']
+                cost_per_mi_feature['properties']['dies_fu'] = costs_per_mile_diesel['Total fuel ($/mi)']
+                cost_per_mi_feature['properties']['dies_lab'] = costs_per_mile_diesel['Total labor ($/mi)']
+                cost_per_mi_feature['properties']['dies_op'] = costs_per_mile_diesel['Other OPEXs ($/mi)']
+
+                cost_per_mi_feature['properties']['diff_tot'] = costs_per_mile['TCO ($/mi)'] - costs_per_mile_diesel['TCO ($/mi)']
+                cost_per_mi_feature['properties']['diff_cap'] = costs_per_mile['Total capital ($/mi)'] - costs_per_mile_diesel['Total capital ($/mi)']
+                cost_per_mi_feature['properties']['diff_fu'] = costs_per_mile['Total electricity ($/mi)'] - costs_per_mile_diesel['Total fuel ($/mi)']
+                cost_per_mi_feature['properties']['diff_lab'] = costs_per_mile['Total labor ($/mi)'] - costs_per_mile_diesel['Total labor ($/mi)']
+                cost_per_mi_feature['properties']['diff_op'] = costs_per_mile['Other OPEXs ($/mi)'] - costs_per_mile_diesel['Other OPEXs ($/mi)']
+                
+                cost_per_mi_feature['properties']['perc_tot'] = 100*(costs_per_mile['TCO ($/mi)'] - costs_per_mile_diesel['TCO ($/mi)']) / costs_per_mile_diesel['TCO ($/mi)']
+                cost_per_mi_feature['properties']['perc_cap'] = 100*(costs_per_mile['Total capital ($/mi)'] - costs_per_mile_diesel['Total capital ($/mi)']) / costs_per_mile_diesel['Total capital ($/mi)']
+                cost_per_mi_feature['properties']['perc_fu'] = 100*(costs_per_mile['Total electricity ($/mi)'] - costs_per_mile_diesel['Total fuel ($/mi)']) / costs_per_mile_diesel['Total fuel ($/mi)']
+                cost_per_mi_feature['properties']['perc_lab'] = 100*(costs_per_mile['Total labor ($/mi)'] - costs_per_mile_diesel['Total labor ($/mi)']) / costs_per_mile_diesel['Total labor ($/mi)']
+                cost_per_mi_feature['properties']['perc_op'] = 100*(costs_per_mile['Other OPEXs ($/mi)'] - costs_per_mile_diesel['Other OPEXs ($/mi)']) / costs_per_mile_diesel['Other OPEXs ($/mi)']
 
     with open(f'geojsons/costs_per_mile_payload{average_payload}_avVMT{average_VMT}_maxChP{max_charging_power}.geojson', mode='w') as cost_geojson:
         json.dump(costs_per_mi_geojson, cost_geojson, indent=4)
@@ -230,25 +281,25 @@ def make_costs_per_mi_diesel_geo(average_payload, average_VMT, diesel_prices_geo
     costs_per_mi_geojson = copy.deepcopy(diesel_prices_geojson)
     for diesel_price_feature, cost_per_mi_feature in zip(diesel_prices_geojson['features'], costs_per_mi_geojson['features']):
         # Check if the 'STUSPS' field (state abbreviation) exists in the properties
-        if 'Cents_kWh' in diesel_price_feature['properties']:
+        if 'dies_price' in diesel_price_feature['properties']:
 
-            del cost_per_mi_feature['properties']['Cents_kWh']
+            del cost_per_mi_feature['properties']['dies_price']
 
-            if electricity_rate_feature['properties']['Cents_kWh'] is None or demand_charge_feature['properties']['Average Ma'] is None:
+            if diesel_price_feature['properties']['dies_price'] is None:
                 cost_per_mi_feature['properties']['$_mi_tot'] = None
                 cost_per_mi_feature['properties']['$_mi_cap'] = None
                 cost_per_mi_feature['properties']['$_mi_fuel'] = None
                 cost_per_mi_feature['properties']['$_mi_lab'] = None
                 cost_per_mi_feature['properties']['$_mi_op'] = None
             else:
-                costs_per_mile = get_costs_per_mile(electricity_rate_feature['properties']['Cents_kWh'], demand_charge_feature['properties']['Average Ma'], average_payload, average_VMT, max_charging_power)
+                costs_per_mile = get_costs_per_mile_diesel(diesel_price_feature['properties']['dies_price'], average_payload, average_VMT)
                 cost_per_mi_feature['properties']['$_mi_tot'] = costs_per_mile['TCO ($/mi)']
                 cost_per_mi_feature['properties']['$_mi_cap'] = costs_per_mile['Total capital ($/mi)']
                 cost_per_mi_feature['properties']['$_mi_fuel'] = costs_per_mile['Total fuel ($/mi)']
                 cost_per_mi_feature['properties']['$_mi_lab'] = costs_per_mile['Total labor ($/mi)']
                 cost_per_mi_feature['properties']['$_mi_op'] = costs_per_mile['Other OPEXs ($/mi)']
 
-    with open(f'geojsons/costs_per_mile_payload{average_payload}_avVMT{average_VMT}_maxChP{max_charging_power}.geojson', mode='w') as cost_geojson:
+    with open(f'geojsons/costs_per_mile_diesel_payload{average_payload}_avVMT{average_VMT}.geojson', mode='w') as cost_geojson:
         json.dump(costs_per_mi_geojson, cost_geojson, indent=4)
         
     ## Plot cost/mile breakdown for a few sample states
@@ -259,8 +310,9 @@ def parallel_make_emissions(average_payload, average_VMT, grid_intensity_geojson
     make_emissions_per_mi_geo(average_payload, average_VMT, grid_intensity_geojson_ba, 'ba_')
     make_emissions_per_mi_geo(average_payload, average_VMT, grid_intensity_geojson_state, 'state_')
 
-def parallel_make_costs(average_payload, average_VMT, max_charging_power, electricity_rates_geojson, demand_charges_geojson):
-    make_costs_per_mi_geo(average_payload, average_VMT, max_charging_power, electricity_rates_geojson, demand_charges_geojson)
+def parallel_make_costs(average_payload, average_VMT, max_charging_power, electricity_rates_geojson, demand_charges_geojson, diesel_prices_geojson):
+    make_costs_per_mi_geo(average_payload, average_VMT, max_charging_power, electricity_rates_geojson, demand_charges_geojson, diesel_prices_geojson)
+
     
 def main():
     grid_intensity_geojson_ba = collect_grid_intensity_geo('ba')
@@ -295,14 +347,14 @@ def main():
                 # Process result if needed
             except Exception as exc:
                 print(f'Generated an exception: {exc} for payload: {average_payload}, VMT: {average_VMT}')
+        
         """
-                
         # Evaluate EV trucking costs in parallel
         for average_payload in average_payloads:
             for average_VMT in average_VMTs:
                 for max_charging_power in max_charging_powers:
                     # Submit each combination of tasks to be executed in parallel
-                    future_costs = executor.submit(parallel_make_costs, average_payload, average_VMT, max_charging_power, electricity_rates_geojson, demand_charges_geojson)
+                    future_costs = executor.submit(parallel_make_costs, average_payload, average_VMT, max_charging_power, electricity_rates_geojson, demand_charges_geojson, diesel_prices_geojson)
                     futures_costs[future_costs] = (average_payload, average_VMT, max_charging_power)
                 
         # Wait for the costs futures to complete and handle them if necessary
@@ -314,23 +366,7 @@ def main():
                 # Process result if needed
             except Exception as exc:
                 print(f'Generated an exception: {exc} for payload: {average_payload}, VMT: {average_VMT}, max charging power: {max_charging_power}')
-                
-        # Evaluate diesel trucking costs in parallel
-        for average_payload in average_payloads:
-            # Submit each combination of tasks to be executed in parallel
-            future_costs = executor.submit(parallel_make_costs, average_payload, average_VMT, max_charging_power, electricity_rates_geojson, demand_charges_geojson)
-            futures_costs[future_costs] = (average_payload, average_VMT, max_charging_power)
-                
-        # Wait for the costs futures to complete and handle them if necessary
-        for future_costs in as_completed(futures_costs):
-            # You can add error handling or results processing here
-            average_payload, average_VMT, max_charging_power = futures_costs[future_costs]
-            try:
-                result = future_costs.result()
-                # Process result if needed
-            except Exception as exc:
-                print(f'Generated an exception: {exc} for payload: {average_payload}, VMT: {average_VMT}, max charging power: {max_charging_power}')
-    
+        
 
 if __name__ == '__main__':
     main()
