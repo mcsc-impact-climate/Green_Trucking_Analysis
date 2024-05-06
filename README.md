@@ -113,7 +113,7 @@ To run:
 python source/get_diesel_prices_by_state.py
 ```
 
-This will produce an output file `tables/average_diesel_price_by_state.csv`.
+This will produce an output csv file `tables/average_diesel_price_by_state.csv` and an output shapefile `data/diesel_price_by_state/diesel_price_by_state.shp`.
 
 ### Validation plots
 
