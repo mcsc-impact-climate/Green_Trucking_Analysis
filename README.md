@@ -100,7 +100,15 @@ This will produce visualizations of the fits in `plots/payload_vs_mileage_functi
 
 ### Evaluate average state diesel prices
 
-Average diesel prices are evaluated for each state using the 
+Average diesel prices are evaluated for each state using the prior 5 years of historical diesel prices, adjusted by the consumer price index to account for inflation.
+
+To run:
+
+```bash
+python source/get_diesel_prices_by_state.py
+```
+
+This will produce an output file `tables/average_diesel_price_by_state.csv`.
 
 ### Validation plots
 
