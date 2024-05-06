@@ -142,10 +142,12 @@ To download the input geojsons into the [`geojsons`](./geojsons) dir:
 
 ```bash
 # From the top level of the repo:
-wget https://mcsc-datahub-files.s3.us-west-2.amazonaws.com/geojsons_simplified/egrid2020_subregions_merged.geojson ./geojsons
-wget https://mcsc-datahub-files.s3.us-west-2.amazonaws.com/geojsons_simplified/demand_charges_by_state.geojson ./geojsons
-wget https://mcsc-datahub-files.s3.us-west-2.amazonaws.com/geojsons_simplified/electricity_rates_by_state_merged.geojson ./geojsons
-wget https://mcsc-datahub-files.s3.us-west-2.amazonaws.com/geojsons_simplified/diesel_price_by_state.geojson ./geojsons
+cd geojsons
+wget https://mcsc-datahub-files.s3.us-west-2.amazonaws.com/geojsons_simplified/egrid2020_subregions_merged.geojson
+wget https://mcsc-datahub-files.s3.us-west-2.amazonaws.com/geojsons_simplified/demand_charges_by_state.geojson 
+wget https://mcsc-datahub-files.s3.us-west-2.amazonaws.com/geojsons_simplified/electricity_rates_by_state_merged.geojson 
+wget https://mcsc-datahub-files.s3.us-west-2.amazonaws.com/geojsons_simplified/diesel_price_by_state.geojson
+cd ..
 ```
 
 To run the code:
