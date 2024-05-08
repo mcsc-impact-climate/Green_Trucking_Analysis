@@ -2,7 +2,7 @@
 
 ## Summary
 
-This code updates the electricity costing and EV truck emissions+TCS analyses developed by the Green group with operating parameters obtained for the Tesla Semi obtained from PepsiCo's Tesla Semi pilot in California using data published [here](https://runonless.com/run-on-less-electric-depot-reports/) by NACFE from their 2023 Run On Less pilot. The code used to obtain the operating parameters for the Tesla semi can be found in [this repo](https://github.com/mcsc-impact-climate/PepsiCo_NACFE_Analysis).
+This code updates the electricity costing and EV truck emissions+TCS analyses developed by the Green group with operating parameters obtained from PepsiCo's Tesla Semi pilot in California using data published [here](https://runonless.com/run-on-less-electric-depot-reports/) by NACFE from their 2023 Run On Less pilot. The code used to obtain the operating parameters for the Tesla semi can be found in [this repo](https://github.com/mcsc-impact-climate/PepsiCo_NACFE_Analysis).
 
 Please see [these slides](https://docs.google.com/presentation/d/1l4Rhx-8UHH76ify1ockwKjT68-v6luahxVGwR-wyRJk/edit?usp=sharing) for a summary of methodology and results obtained with this code. 
 
