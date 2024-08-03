@@ -8,7 +8,7 @@
 
 This code updates the electricity costing and EV truck emissions+TCS analyses developed by Kariana Moreno Sader and Sayandeep Biswas with operating parameters obtained from PepsiCo's Tesla Semi pilot in California using data published [here](https://runonless.com/run-on-less-electric-depot-reports/) by NACFE from their 2023 Run On Less pilot. The code used to obtain the operating parameters for the Tesla semi can be found in [this repo](https://github.com/mcsc-impact-climate/PepsiCo_NACFE_Analysis).
 
-Links to [original colab notebook](https://colab.research.google.com/drive/124rFu_4vHx4cP6SODtdzCxnUmLY50wbW?usp=sharing) developed by Kariana Sader and Sayandeep Biswas and [associated publication (Moreno Sader et al., 2023)](https://chemrxiv.org/engage/chemrxiv/article-details/656e4691cf8b3c3cd7c96810).
+Links to [original colab notebook](https://colab.research.google.com/drive/124rFu_4vHx4cP6SODtdzCxnUmLY50wbW?usp=sharing) developed by Kariana Moreno Sader and Sayandeep Biswas and [associated publication (Moreno Sader et al., 2023)](https://chemrxiv.org/engage/chemrxiv/article-details/656e4691cf8b3c3cd7c96810).
 
 Please see [these slides](https://docs.google.com/presentation/d/1l4Rhx-8UHH76ify1ockwKjT68-v6luahxVGwR-wyRJk/edit?usp=sharing) for a summary of methodology and results obtained with this code. 
 
