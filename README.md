@@ -1,3 +1,7 @@
+
+
+[![DOI](https://zenodo.org/badge/750992867.svg)](https://zenodo.org/doi/10.5281/zenodo.13205851)
+
 # Calibration and regional analysis of Green group trucking model
 
 ## Summary
