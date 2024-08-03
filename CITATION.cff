@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "MacDonell"
+  given-names: "Danika"
+  orcid: "https://orcid.org/0000-0001-5533-6300"
+- family-names: "Moreno-Sader"
+  given-names: "Kariana"
+  orcid: "https://orcid.org/0000-0002-7149-5333"
+- family-names: "Biswas"
+  given-names: "Sayandeep"
+  orcid: "https://orcid.org/0000-0002-0606-3884"
+title: "Green_Trucking_Analysis"
+version: 0.1.0
+doi: 10.5281/zenodo.13205854
+date-released: 2024-08-03
+url: "https://github.com/mcsc-impact-climate/Green_Trucking_Analysis"
