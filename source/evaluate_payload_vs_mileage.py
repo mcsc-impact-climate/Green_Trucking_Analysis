@@ -8,17 +8,14 @@ import data_collection_tools
 import concurrent.futures
 from datetime import datetime
 import pandas as pd
+from common_tools import get_linear_drivecycles
 
 KG_PER_TON = 1000
 KG_PER_LB = 0.453592
 SECONDS_PER_HOUR = 3600
 
 ###################################### Select drivecycles to consider #####################################
-drivecycles = {
-    'pepsi_1': [2, 9, 13, 15, 33],
-    'pepsi_2': [7, 10, 14, 22, 25, 31],
-    'pepsi_3': [8, 10, 13, 16, 21, 24, 28, 32, 33]
-}
+drivecycles = get_linear_drivecycles()
 ###########################################################################################################
 
 # Function to evaluate matching payloads in parallel
