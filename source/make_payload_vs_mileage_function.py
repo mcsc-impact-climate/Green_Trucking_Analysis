@@ -35,9 +35,9 @@ def main():
 
     # Plot the data
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.tick_params(axis='both', which='major', labelsize=14)
-    ax.set_xlabel('Best-fitting Payload (lb)', fontsize=20)
-    ax.set_ylabel('Fuel Economy (kWh/mile)', fontsize=20)
+    ax.tick_params(axis='both', which='major', labelsize=20)
+    ax.set_xlabel('Best-fitting Payload (lb)', fontsize=22)
+    ax.set_ylabel('Energy Economy (kWh/mile)', fontsize=22)
     ax.scatter(payload_vs_mileage_df['Payload (lb)'], payload_vs_mileage_df['Mileage (kWh/mi)'], color='black')
     xmin, xmax = ax.get_xlim()
     ymin, ymax = ax.get_ylim()
@@ -64,7 +64,7 @@ def main():
     ax.set_ylim(b-b_unc-0.01, ymax)
     ax.fill_betweenx(np.linspace(b-b_unc-0.01, ymax, 10), payload_GVW_max, xmax, color='red', alpha=0.3, label='GVW > 82,000 lb')
     
-    ax.legend(fontsize=14)
+    ax.legend(fontsize=18)
     plt.tight_layout()
     plt.savefig('plots/payload_vs_mileage_function.png')
     
