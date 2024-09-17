@@ -22,6 +22,9 @@ plt.rcParams.update(new_rc_params)
 KG_PER_TON = 1000
 KG_PER_LB = 0.453592
 SECONDS_PER_HOUR = 3600
+SECONDS_PER_MINUTE = 60
+M_PER_MILE = 1609.34
+S_PER_H = 3600
 
 ######################################### Obtain model parameters #########################################
 # Annual VMT from VIUS 2002
@@ -79,24 +82,24 @@ battery_unit_cost_LFP = [float(df_scenarios['LFP battery unit cost'].iloc[0])] #
 ########### Road grade over time ###########
 fig, axs = plt.subplots(2, 1, figsize=(10, 7), gridspec_kw={'height_ratios': [2, 1]})  # 2 rows, 1 column
 axs[0].set_title('Long-haul Drivecycle', fontsize=18)
-axs[0].set_ylabel('Speed (m/s)', fontsize=16)
+axs[0].set_ylabel('Speed (mph)', fontsize=16)
 axs[1].set_ylabel('Road grade (%)', fontsize=16)
-axs[1].set_xlabel('Drive time (h)', fontsize=16)
+axs[1].set_xlabel('Drive time (minutes)', fontsize=16)
 axs[0].tick_params(axis='both', which='major', labelsize=14)
 axs[1].tick_params(axis='both', which='major', labelsize=14)
 
 # Add major/minor ticks and gridlines
-axs[0].xaxis.set_major_locator(MultipleLocator(2))
-axs[0].xaxis.set_minor_locator(MultipleLocator(0.5))
+axs[0].xaxis.set_major_locator(MultipleLocator(100))
+axs[0].xaxis.set_minor_locator(MultipleLocator(20))
 axs[0].grid(which='minor', linestyle='--', linewidth=0.5, color='gray')
 axs[0].grid(which='major', linestyle='-', linewidth=0.5, color='black')
-axs[1].xaxis.set_major_locator(MultipleLocator(2))
-axs[1].xaxis.set_minor_locator(MultipleLocator(0.5))
+axs[1].xaxis.set_major_locator(MultipleLocator(100))
+axs[1].xaxis.set_minor_locator(MultipleLocator(20))
 axs[1].grid(which='minor', linestyle='--', linewidth=0.5, color='gray')
 axs[1].grid(which='major', linestyle='-', linewidth=0.5, color='black')
 
-axs[0].plot(df_drivecycle['Time (s)']/SECONDS_PER_HOUR, df_drivecycle['Vehicle speed (m/s)'], color='blue')
-axs[1].plot(df_drivecycle['Time (s)']/SECONDS_PER_HOUR, df_drivecycle['Road grade (%)'], color='green')
+axs[0].plot(df_drivecycle['Time (s)']/SECONDS_PER_MINUTE, df_drivecycle['Vehicle speed (m/s)'] * S_PER_H / M_PER_MILE)
+axs[1].plot(df_drivecycle['Time (s)']/SECONDS_PER_MINUTE, df_drivecycle['Road grade (%)'], color='green')
 plt.savefig('plots/long_haul_drivecycle.png')
 plt.close()
 ############################################
@@ -177,16 +180,16 @@ for category in ['Truck Model', 'Emissions Model', 'Costing Model']:
 # Make plots for the emissions and costing categories to visualize the differences
 for category in ['Emissions Model', 'Costing Model']:
     if category == 'Emissions Model':
-        fig, axs = plt.subplots(2, 1, figsize=(7, 7), gridspec_kw={'height_ratios': [2, 1]})  # 2 rows, 1 column
+        fig, axs = plt.subplots(2, 1, figsize=(8, 7), gridspec_kw={'height_ratios': [2, 1]})  # 2 rows, 1 column
     else:
         fig, axs = plt.subplots(2, 1, figsize=(10, 7), gridspec_kw={'height_ratios': [2, 1]})  # 2 rows, 1 column
     title_label = category.split(' ')[0]
-    axs[0].set_title(f'Impact of Road Grade on Present Day {title_label}', fontsize=18)
+    #axs[0].set_title(f'Impact of Road Grade on Present Day {title_label}', fontsize=18)
     if category == 'Costing Model':
         axs[0].set_ylabel('Cost ($/mile)', fontsize=16)
     else:
         axs[0].set_ylabel('Emissions (gCO2e/mile)', fontsize=16)
-    axs[1].set_ylabel('% Change Without Grade', fontsize=16)
+    axs[1].set_ylabel('Relative Impact (%)', fontsize=16)
     axs[0].tick_params(axis='both', which='major', labelsize=14)
     axs[1].tick_params(axis='both', which='major', labelsize=14)
 
@@ -206,8 +209,8 @@ for category in ['Emissions Model', 'Costing Model']:
     axs[1].errorbar(indices+1, results['Percent Difference'][category].values(), xerr=0.25, fmt='o', color='green', linewidth=2)
     save_label = category.split(' ')[0].lower()
     axs[0].legend(fontsize=16)
-    plt.tight_layout()
-    plt.savefig(f'plots/results_comparison_{save_label}.png')
+    #plt.tight_layout()
+    plt.savefig(f'plots/results_comparison_{save_label}.png', dpi=300)
     plt.close()
     
 ###########################################################################################################
