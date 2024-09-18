@@ -27,14 +27,18 @@ def parallel_evaluate_matching_payload(args):
     # Unpack arguments
     truck_name, driving_event, parameters, battery_params_dict = args
     
-    return payload_matching_tools.evaluate_matching_payload(truck_name, driving_event, parameters, battery_params_dict)
+    result = payload_matching_tools.evaluate_matching_payload(truck_name, driving_event, parameters, battery_params_dict, visualize=False)
+    
+    output = (truck_name,) + result
+    
+    return output
 
 def main():
     parameters = data_collection_tools.read_parameters(truck_params='semi', vmt_params = 'daycab_vmt_vius_2021')
     parameters.m_max = 120000
     battery_params_dict = data_collection_tools.read_battery_params()
 
-    evaluated_gvws_df = pd.DataFrame(columns=['Payload (lb)', 'Gross Vehicle Weight (lb)', 'Mileage (kWh/mi)'])
+    evaluated_gvws_df = pd.DataFrame(columns=['Truck', 'Payload (lb)', 'Gross Vehicle Weight (lb)', 'Mileage (kWh/mi)'])
     for truck_name in drivecycles:
         drivecycle_events_list = drivecycles[truck_name]
         args_list = [(truck_name, driving_event, parameters, battery_params_dict) for driving_event in drivecycle_events_list]
@@ -45,7 +49,7 @@ def main():
             results = list(executor.map(parallel_evaluate_matching_payload, args_list))
         
         # Assuming results are in the format expected, create a DataFrame
-        evaluated_gvws_df = pd.concat([evaluated_gvws_df, pd.DataFrame(results, columns=['Payload (lb)', 'Gross Vehicle Weight (lb)', 'Mileage (kWh/mi)'])])
+        evaluated_gvws_df = pd.concat([evaluated_gvws_df, pd.DataFrame(results, columns=['Truck', 'Payload (lb)', 'Gross Vehicle Weight (lb)', 'Mileage (kWh/mi)'])])
         run_time = datetime.now() - startTime
         run_time = run_time.total_seconds()
         print(f'Processing time for {truck_name}: {run_time}s')

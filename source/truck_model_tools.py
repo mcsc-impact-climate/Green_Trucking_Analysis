@@ -8,6 +8,9 @@ import pandas as pd
 
 KG_PER_TON = 1000
 KG_PER_LB = 0.453592
+M_PER_MILE = 1609.34
+W_PER_KW = 1000
+S_PER_H = 3600.
 
 class read_parameters:
   def __init__(self, f_truck_params, f_economy_params, f_constants, f_vmt):
@@ -20,7 +23,6 @@ class read_parameters:
     self.m_ave_payload = float(df_truck_params['Value'].loc['Average payload'])
     self.m_max = float(df_truck_params['Value'].loc['Max gross vehicle weight'])
     self.m_truck_no_bat = ( float(df_truck_params['Value'].loc['Diesel tractor weight']) + float(df_truck_params['Value'].loc['Weight of motor, inverter, electronics']) - float(df_truck_params['Value'].loc['Engine weight']) - float(df_truck_params['Value'].loc['Emission control system weight']) - float(df_truck_params['Value'].loc['Fuel system weight']) ) * KG_PER_LB
-    self.m_guess = self.m_ave_payload + self.m_truck_no_bat
 
     # Power consumption
     self.p_aux = float(df_truck_params['Value'].loc['Auxiliary power'])
@@ -49,12 +51,11 @@ class read_parameters:
     self.discountrate = float(df_economy_params['Value'].loc['Discount rate'])
 
 class share_parameters:
-  def __init__(self,m_ave_payload, m_max, m_truck_no_bat, m_guess, p_aux, p_motor_max, cd, cr, a_cabin, g, rho_air, DoD, eta_i, eta_m, eta_gs, eta_rb, eta_grid_transmission, VMT, discountrate):
+  def __init__(self,m_ave_payload, m_max, m_truck_no_bat, p_aux, p_motor_max, cd, cr, a_cabin, g, rho_air, DoD, eta_i, eta_m, eta_gs, eta_rb, eta_grid_transmission, VMT, discountrate):
 
     self.m_ave_payload=m_ave_payload
     self.m_max = m_max
     self.m_truck_no_bat=m_truck_no_bat
-    self.m_guess=m_guess
     self.p_aux=p_aux
     self.p_motor_max=p_motor_max
 
@@ -79,97 +80,71 @@ class share_parameters:
 class truck_model:
   def __init__(self, parameters):
     self.parameters = parameters
+
+  def get_linear_energy_economy_coefs(self, df, eta_battery, e_density, e_bat):
+    """
+    Uses the physics-based truck model to evaluate linear coefficients of energy economy as a function of payload for a Semi EV truck.
     
-  def get_simulated_vehicle_power(self, df, m):
-  
-    # Remove any elements with big time jumps
-    delta_t = df['Time (s)'].diff().fillna(0) #calculate time steps (delta time= 1 seconds for the US long haul drive cycle used). first data point Na is filled with zero
-    df = df[delta_t < 1.5].reset_index(drop=True)
-    delta_t = delta_t[delta_t < 1.5].reset_index(drop=True)
+    Parameters
+    ----------
+    df (Pandas DataFrame): Dataframe containing the drivecycle.
+
+    Returns
+    -------
+    slope (float): Slope of gallons per mile vs. payload
+    y_intercept (float): Y-intercept of gallons per mile vs. payload
+    kwh_per_mile_ave_payload: Miles per gallon evaluated for the average payload.
+    """
+    m_bat = e_bat*KG_PER_TON/e_density
+    m = self.parameters.m_truck_no_bat + m_bat + self.parameters.m_ave_payload
     v_drive_cycle = df['Vehicle speed (m/s)'].shift(-1)
     road_angle = df['Road angle']
-    simulated_vehicle_speed, power_request_motor= [0],[] #initialize variables for simulated vehicle speed as motor is limited to deliver 425kW
+    delta_t = df['Time (s)'].diff().fillna(0) #calculate time steps (delta time= 1 seconds for the US long haul drive cycle used). first data point Na is filled with zero
+    simulated_vehicle_speeds = [0] #initialize variables for simulated vehicle speed as motor is limited
+    power_request_motor_slopes, power_request_motor_intercepts, power_request_motors = [],[],[]   # Slope and y_intercept of linear function fuel_consumption = slope * m + intercept
 
     for i in range(len(v_drive_cycle)-1):
-      target_acceleration = v_drive_cycle[i] - simulated_vehicle_speed[i] #required acceleration to match drive cycle in terms of vehicle speed
-      fr = m*self.parameters.g*self.parameters.cr*np.cos(road_angle[i]) #force from rolling resistance in N
-      fg = m*self.parameters.g*np.sin(road_angle[i]) #force from gravitational in N
-      fd = self.parameters.rho_air*self.parameters.a_cabin*self.parameters.cd*np.power(simulated_vehicle_speed[i],2)/2 #force from aerodynamic drag in N
-      maximum_acceleration = ((self.parameters.p_motor_max*self.parameters.eta_i*self.parameters.eta_m*self.parameters.eta_gs/simulated_vehicle_speed[i]) - fr - fg - fd)/m if simulated_vehicle_speed[i] > 0 else 1e9
+      target_acceleration = v_drive_cycle[i] - simulated_vehicle_speeds[i] #required acceleration to match drive cycle in terms of vehicle speed
+      ar = self.parameters.g*self.parameters.cr*np.cos(road_angle[i]) #force from rolling resistance in N
+      ag = self.parameters.g*np.sin(road_angle[i]) #force from gravitational in N
+      fd = self.parameters.rho_air*self.parameters.a_cabin*self.parameters.cd*np.power(simulated_vehicle_speeds[i], 2) / 2 #force from aerodynamic drag in N
+      maximum_acceleration = ((self.parameters.p_motor_max*self.parameters.eta_i*self.parameters.eta_m*self.parameters.eta_gs/simulated_vehicle_speeds[i]) - ar*m - ag*m - fd)/m if simulated_vehicle_speeds[i] >0 else 1e9
 
       a=min(target_acceleration,maximum_acceleration) #minimum acceleration between target acceleration to follow drive cycle versus maximum acceleration of truck at Pmax
-      simulated_vehicle_speed.append(simulated_vehicle_speed[i]+a*delta_t[i]) #update vehicle speed for next iteration
-
-      fa=m*a
-      power_request_wheels= (fr + fg + fd + fa)* simulated_vehicle_speed[i] #total power request at the wheels in W
-      power_request_motor.append(self.parameters.eta_rb*power_request_wheels if power_request_wheels<0 else power_request_wheels/(self.parameters.eta_i*self.parameters.eta_m*self.parameters.eta_gs)) #total power request at the motor in W
       
-    return df, simulated_vehicle_speed, power_request_motor
+      acc_request_wheels = (ar + ag + fd/m + a) * simulated_vehicle_speeds[i] #total acceleration request at the wheels in W
+      
+      # Find the slope and y-intercept for the approximate linear relationship power_request_motor = power_request_motor_slope * m + power_request_motor_intercept
+      power_request_motor_slopes.append((ar + ag + a) * simulated_vehicle_speeds[i] / (self.parameters.eta_i*self.parameters.eta_m*self.parameters.eta_gs*eta_battery) if acc_request_wheels > 0 else (ar + ag + a) * simulated_vehicle_speeds[i] * self.parameters.eta_rb)
+      power_request_motor_intercepts.append(fd * simulated_vehicle_speeds[i] / (self.parameters.eta_i*self.parameters.eta_m*self.parameters.eta_gs*eta_battery) + self.parameters.p_aux/eta_battery if acc_request_wheels > 0 else fd * simulated_vehicle_speeds[i] * self.parameters.eta_rb + self.parameters.p_aux/eta_battery)
+      
+      power_request_motors.append(power_request_motor_slopes[-1]*m + power_request_motor_intercepts[-1])
+      #print(f"power request to battery from linear coefs: {power_request_motors[-1]}")
+      
+      simulated_vehicle_speeds.append(simulated_vehicle_speeds[i]+a*delta_t[i]) #update vehicle speed for next iteration
+    
+    power_request_motor_slopes.append(0)
+    power_request_motor_slopes = np.asarray(power_request_motor_slopes)
+    power_request_motor_intercepts.append(0)
+    power_request_motor_intercepts = np.asarray(power_request_motor_intercepts)
+    power_request_motors.append(0)
+    power_request_motors = np.asarray(power_request_motors)
+    
+    df['Simulated vehicle speed (m/s)'] = simulated_vehicle_speeds
+    cSpeed = (df['Simulated vehicle speed (m/s)'] < 30) & (df['Simulated vehicle speed (m/s)'] >= 0)  # Exclude events with unphysical speeds
+    cMotorMax = power_request_motors > -self.parameters.p_motor_max    # Exclude events for which the regenerative braking power exceeds the motor max
+    slope = ( np.trapz(power_request_motor_slopes[cSpeed&cMotorMax], df['Time (s)'][cSpeed&cMotorMax]) / np.trapz(df['Simulated vehicle speed (m/s)'][cSpeed&cMotorMax], df['Time (s)'][cSpeed&cMotorMax]) ) * M_PER_MILE / (W_PER_KW * S_PER_H)  # Slope of linear motor power as a function of GVW, in kWh/kg
+    
+    y_intercept = ( np.trapz(power_request_motor_intercepts[cSpeed&cMotorMax], df['Time (s)'][cSpeed&cMotorMax]) / np.trapz(df['Simulated vehicle speed (m/s)'][cSpeed&cMotorMax], df['Time (s)'][cSpeed&cMotorMax]) ) * M_PER_MILE / (W_PER_KW * S_PER_H) # y-intercept of linear motor power as a function of GVW, in kWh
+    
+    # Integrate the tractor mass into the y_intercept to get fuel consumption = payload * slope + y_intercept_payload
+    y_intercept_payload = y_intercept + (self.parameters.m_truck_no_bat + m_bat) * slope
+    
+    # Evaluate fuel consumption in kwh per mile for the average payload
+    kwh_per_mile_ave_payload = self.parameters.m_ave_payload * slope + y_intercept_payload
 
+    return slope, y_intercept_payload, kwh_per_mile_ave_payload
 
-  ##Inputs: dataframe df with drive cycle data, eta_battery--->battery efficiency (#), m---> total truck mass (kg)
-  ##outputs: e_bat--->battery energy capacity in kWh, fuel_consumption--->fuel consumption in kWh/mi, df ---> updated dataframe with the new variables (e.g. simulated vehicle speed)
-  def get_power_requirement(self, df, m, eta_battery):
-    v_drive_cycle = df['Vehicle speed (m/s)'].shift(-1)
-    road_angle = df['Road angle']
-    delta_t = df['Time (s)'].diff().fillna(0) #calculate time steps (delta time= 1 seconds for the US long haul drive cycle used). first data point Na is filled with zero
-    simulated_vehicle_speed, power_request_motor= [0],[] #initialize variables for simulated vehicle speed as motor is limited to deliver 425kW
-
-    for i in range(len(v_drive_cycle)-1):
-      target_acceleration = v_drive_cycle[i] - simulated_vehicle_speed[i] #required acceleration to match drive cycle in terms of vehicle speed
-      fr = m*self.parameters.g*self.parameters.cr*np.cos(road_angle[i]) #force from rolling resistance in N
-      fg = m*self.parameters.g*np.sin(road_angle[i]) #force from gravitational in N
-      fd = self.parameters.rho_air*self.parameters.a_cabin*self.parameters.cd*np.power(simulated_vehicle_speed[i],2)/2 #force from aerodynamic drag in N
-      maximum_acceleration = ((self.parameters.p_motor_max*self.parameters.eta_i*self.parameters.eta_m*self.parameters.eta_gs/simulated_vehicle_speed[i]) - fr - fg - fd)/m if simulated_vehicle_speed[i] >0 else 1e9
-
-      a=min(target_acceleration,maximum_acceleration) #minimum acceleration between target acceleration to follow drive cycle versus maximum acceleration of truck at Pmax
-      simulated_vehicle_speed.append(simulated_vehicle_speed[i]+a*delta_t[i]) #update vehicle speed for next iteration
-
-      fa=m*a
-      power_request_wheels= (fr + fg + fd + fa)* simulated_vehicle_speed[i] #total power request at the wheels in W
-      power_request_motor.append(self.parameters.eta_rb*power_request_wheels if power_request_wheels<0 else power_request_wheels/(self.parameters.eta_i*self.parameters.eta_m*self.parameters.eta_gs)) #total power request at the motor in W
-
-
-    ####****battery energy capacity****####
-    power_request_motor.append(0)
-    df['Simulated vehicle speed (m/s)'] = simulated_vehicle_speed
-    df['Power request at the motor (W)'] = power_request_motor
-    df['Power request at battery (W)'] = df['Power request at the motor (W)'].apply(lambda x: np.where (x<0, x+(self.parameters.p_aux/eta_battery),(x+self.parameters.p_aux)/eta_battery))
-    df['Power request at battery (W)'] = df['Power request at battery (W)'].apply(lambda x: np.where (x<-self.parameters.p_motor_max, -self.parameters.p_motor_max, x)) #regenerative braking constrained to maximum power that motor can receive
-
-    # DMM: e_bat: battery size (kWh). fuel_consumption: energy per unit distance
-    e_bat = np.trapz(df['Power request at battery (W)'],df['Time (s)'])*2.7778*np.float_power(10,-7)/self.parameters.DoD #energy of tractive battery in kWh
-    cSpeed = (df['Simulated vehicle speed (m/s)'] < 30) & (df['Simulated vehicle speed (m/s)'] >= 0)
-#    import matplotlib.pyplot as plt
-#    plt.plot(df['Simulated vehicle speed (m/s)'][(df['Simulated vehicle speed (m/s)'] < 30) & (df['Simulated vehicle speed (m/s)'] >= 0)])
-#    plt.show()
-#    plt.close()
-    fuel_consumption = np.trapz(df['Power request at battery (W)'][cSpeed], df['Time (s)'][cSpeed])*2.7778*np.float_power(10,-7)/(np.trapz(df['Simulated vehicle speed (m/s)'][cSpeed], df['Time (s)'][cSpeed])/(1.609344*1000)) #energy consumption in kWh/mile
-
-    return df, e_bat, fuel_consumption
-
-
-  ####****Battery size for trucks carring average payload****####
-  ##Inputs: parameters in self, and dataframe with drive cycle
-  ##outputs: m_bat--->calculated baattery mass in kg,e_bat--->battery energy capacity in kWh, mileage--->fuel consumption in kWh/mi, m-->Gross vehicle weight in kg
-  def get_battery_size(self, df, eta_battery, e_density):
-    m_guess=self.parameters.m_guess
-    convergence = 0.45 #convergence criteria 1 lbs (0.45 kg)
-    epsilon = 2 #initial value for convergence to enter loop
-
-    while epsilon > convergence: #convergence loop for battery weight
-      df, e_bat, mileage = truck_model(self.parameters).get_power_requirement(df, m_guess, eta_battery)
-      m_bat = e_bat*KG_PER_TON/e_density;  #battery weight in kg
-      m = m_bat + self.parameters.m_ave_payload + self.parameters.m_truck_no_bat #m is the Gross Vehicle Weight (GVW) in kg
-      epsilon = abs(m - m_guess)
-      m_guess = m
-    if m > self.parameters.m_max: #case where the GVW exceeds the limit of 80k pounds
-      print('Maximum total truck mass (82000 lbs) exceeded')
-      m = self.parameters.m_max #GVW=82k pounds
-      df, e_bat, mileage = truck_model(self.parameters).get_power_requirement(df, m, eta_battery)
-      m_bat = e_bat*KG_PER_TON/e_density;  #battery weight in kg
-
-    return m_bat, e_bat, mileage, m
     
 def extract_drivecycle_data(f_drivecycle):
     if f_drivecycle.endswith('.xlsx'):

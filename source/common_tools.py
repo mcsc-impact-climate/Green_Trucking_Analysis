@@ -14,8 +14,6 @@ def get_top_dir():
     Returns
     -------
     top_dir (string): Path to the top level of the git repo
-
-    NOTE: None
     """
     source_path = Path(__file__).resolve()
     source_dir = source_path.parent
@@ -62,3 +60,21 @@ def get_linear_drivecycles(RMSE_cutoff=10):
         drivecycles[f'pepsi_{file_identifier}'] = driving_events
 
     return drivecycles
+    
+def make_title_string(info_string):
+    """
+    Converts an info string (assumed to be lower case and underscore-separated) into a title string (space-separated with first letter of each word capitalized).
+    
+    Parameters
+    ----------
+    info_string (string): Input info string (lower case, underscore-separated)
+
+    Returns
+    -------
+    title_string (string): Output title string (space-separated, first letter of each word capitalized).
+    """
+    
+    space_separated = info_string.replace("_", " ")
+    title_string = space_separated.title()
+    return title_string
+    

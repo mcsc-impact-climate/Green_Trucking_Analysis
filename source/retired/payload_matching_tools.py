@@ -131,7 +131,7 @@ def visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_re
     plt.close()
     
 # Function to evaluate the payload that best reproduces the battery size and fuel economy for the given drivecycle
-def evaluate_matching_payload(truck_name, driving_event, parameters, battery_params_dict):
+def evaluate_matching_payload(truck_name, driving_event, parameters, battery_params_dict, visualize=True):
         
     # Read in the NACFE results
     NACFE_results = get_nacfe_results(truck_name, driving_event)
@@ -146,7 +146,8 @@ def evaluate_matching_payload(truck_name, driving_event, parameters, battery_par
     payload_e_bat, payload_mileage, payload_fit, gvw_fit, cs_e_bat, cs_mileage, cs_m = fit_payload(vehicle_model_results, NACFE_results)
         
     # Visualize the results
-    visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_results, payload_e_bat, payload_mileage, payload_fit, gvw_fit, cs_e_bat, cs_mileage, cs_m)
+    if visualize:
+        visualize_results(truck_name, driving_event, vehicle_model_results, NACFE_results, payload_e_bat, payload_mileage, payload_fit, gvw_fit, cs_e_bat, cs_mileage, cs_m)
 
     return payload_fit, gvw_fit, NACFE_results['Fuel economy (kWh/mi)']
     
