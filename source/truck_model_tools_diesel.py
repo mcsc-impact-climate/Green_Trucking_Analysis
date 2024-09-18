@@ -86,8 +86,20 @@ class truck_model:
 
   ##Inputs: dataframe df with drive cycle data, m---> total truck mass (kg)
   ##outputs: fuel_consumption--->fuel consumption in kWh/mi, df ---> updated dataframe with the new variables (e.g. simulated vehicle speed)
-  def get_power_requirement(self, df):
-    # Set the GVW m assuming we're carrying the VIUS average payload
+  def get_linear_gpm_coefs(self, df):
+    """
+    Uses the physics-based truck model to evaluate linear coefficients of gallons per mile as a function of payload for a diesel truck.
+    
+    Parameters
+    ----------
+    df (Pandas DataFrame): Dataframe containing the drivecycle.
+
+    Returns
+    -------
+    slope_gpm (float): Slope of gallons per mile vs. payload
+    y_intercept_gpm (float): Y-intercept of gallons per mile vs. payload
+    miles_per_gallon_ave_payload: Miles per gallon evaluated for the average payload. 
+    """
     m = self.parameters.m_truck + self.parameters.m_ave_payload
     
     v_drive_cycle = df['Vehicle speed (m/s)'].shift(-1)
@@ -99,18 +111,6 @@ class truck_model:
 
     for i in range(len(v_drive_cycle)-1):
       target_acceleration = v_drive_cycle[i] - simulated_vehicle_speeds[i] #required acceleration to match drive cycle in terms of vehicle speed\
-      
-      # Keeping this original code for reference because it shows the actual calculation of power request at the motor more clearly
-#      fr = m*self.parameters.g*self.parameters.cr*np.cos(road_angle[i]) #force from rolling resistance in N
-#      fg = m*self.parameters.g*np.sin(road_angle[i]) #force from gravitational in N
-#      fd = self.parameters.rho_air*self.parameters.a_cabin*self.parameters.cd*np.power(simulated_vehicle_speeds[i],2)/2 #force from aerodynamic drag in N
-#      maximum_acceleration = ((self.parameters.p_motor_max*self.parameters.eta_e*self.parameters.eta_d/simulated_vehicle_speeds[i]) - fr - fg - fd)/m if simulated_vehicle_speeds[i] > 0 else 1e9
-#
-#      a=min(target_acceleration,maximum_acceleration) #minimum acceleration between target acceleration to follow drive cycle versus maximum acceleration of truck at Pmax
-#      fa=m*a
-#
-#      power_request_wheels = (fr + fg + fd + fa) * simulated_vehicle_speeds[i] #total power request at the wheels in W
-#      power_request_motors.append(power_request_wheels/(self.parameters.eta_e*self.parameters.eta_d) if power_request_wheels > 0 else 0) #total power request at the motor in W
       
       ar = self.parameters.g*self.parameters.cr*np.cos(road_angle[i]) #acceleration from rolling resistance in N
       ag = self.parameters.g*np.sin(road_angle[i]) #acceleration from rolling resistance in N
