@@ -48,6 +48,18 @@ def read_charger_cost_info(filename, scenario='Baseline'):
     
     return installation_cost, hardware_cost, fixed_monthly_cost
 
+
+"""
+Function: Calculate the total energy required to charge the truck battery over its full lifetime
+Inputs:
+    - VMT: Annual miles traveled (miles/year)
+    - mileage (float): Fuel economy of the truck (kWh / mile)
+Returns:
+    - lifetime_energy_demand: Lifetime energy required to charge the truck battery, in kWh
+"""
+def calculate_lifetime_energy_demand(VMT, mileage):
+    return np.sum(VMT["VMT (miles)"] * mileage)
+
 """
 Function: Calculate the electricity price per kWh
 Inputs:
@@ -58,8 +70,8 @@ Inputs:
     - charging_power (float): Average charging power (kW)
     - charging_efficiency (float): Efficiency of charging the battery (relative to energy from the power source)
 """
-def calculate_electricity_unit(VMT, mileage, demand_charge, electricity_charge, charging_power, charging_efficiency=0.92, charger_cost_filename='data/charger_cost_data.csv', charger_cost_scenario='Baseline'):
-    lifetime = 15       # Truck lifetime
+def calculate_electricity_unit(VMT, mileage, demand_charge, electricity_charge, charging_power, lifetime_energy_demand, charging_efficiency=0.92, charger_cost_filename='data/charger_cost_data.csv', charger_cost_scenario='Baseline'):
+    lifetime = 15       # Lifetime of the capital assets
     discount_rate = 7        # Discount rate (%)
     
     # Read in the charger cost info
@@ -67,24 +79,24 @@ def calculate_electricity_unit(VMT, mileage, demand_charge, electricity_charge, 
     
     # Convert charging energy per month to kWh
     charging_energy_per_month = calculate_charging_energy_per_month(VMT, mileage)
-        
-    lifetime_energy_sold = (charging_energy_per_month * MONTHS_PER_YEAR * lifetime)
+    
     capital_cost = (hardware_cost + installation_cost) * (1 + discount_rate / 100.)**lifetime
-    norm_cap_cost = capital_cost / lifetime_energy_sold
+    norm_cap_cost = capital_cost / lifetime_energy_demand
     norm_demand_charge = charging_power * demand_charge / charging_energy_per_month
     norm_energy_charge = electricity_charge / charging_efficiency
-    norm_fixed_monthly = fixed_monthly_cost * MONTHS_PER_YEAR * lifetime / lifetime_energy_sold
-    total_charge = norm_cap_cost + (norm_demand_charge + norm_energy_charge + norm_fixed_monthly)
+    norm_fixed_monthly = fixed_monthly_cost / charging_energy_per_month
+    total_charge = norm_cap_cost + norm_demand_charge + norm_energy_charge + norm_fixed_monthly
     
     return total_charge, norm_cap_cost, norm_fixed_monthly, norm_energy_charge, norm_demand_charge
     
-def calculate_electricity_unit_by_row(row, mileage, demand_charge, electricity_charge, charging_power):
+def calculate_electricity_unit_by_row(row, mileage, demand_charge, electricity_charge, charging_power, lifetime_energy_demand):
     total_charge, norm_cap_cost, norm_fixed_monthly, norm_energy_charge, norm_demand_charge = calculate_electricity_unit(
         VMT = row['VMT (miles)'],
         mileage = mileage,
         demand_charge = demand_charge,
         electricity_charge = electricity_charge,
-        charging_power = charging_power)
+        charging_power = charging_power,
+        lifetime_energy_demand = lifetime_energy_demand)
     return pd.Series([total_charge, norm_cap_cost, norm_fixed_monthly, norm_energy_charge, norm_demand_charge])
     
 """
@@ -92,8 +104,11 @@ Function: Given an average lifetime VMT, obtains the distribution of VMT over a 
 Inputs:
     - average_VMT (float): Average annual miles traveled over the truck's lifetime
 """
-def get_VMT_distribution(nominal_VMT, average_VMT):
-    return average_VMT * nominal_VMT / np.mean(nominal_VMT)
+def get_VMT_distribution(nominal_VMT, average_VMT=85000):
+    if average_VMT is not None:
+        return average_VMT * nominal_VMT / np.mean(nominal_VMT)
+    else:
+        return nominal_VMT
 
 """
 Function: Gets the mileage given an input payload
@@ -140,10 +155,11 @@ Function: Collects the VIUS payload distribution for class 8 semis and scales it
 Inputs:
     - payload (float): Desired average payload, in lb
 """
-def get_payload_distribution(m_payload_lb):
+def get_payload_distribution(m_payload_lb=None):
     nominal_payload_distribution = pd.read_excel('data/payloaddistribution.xlsx')
     payload_distribution = nominal_payload_distribution.copy()
-    payload_distribution['Payload (lb)'] = m_payload_lb * payload_distribution['Payload (lb)'] / np.mean(payload_distribution['Payload (lb)'])
+    if m_payload_lb is not None:
+        payload_distribution['Payload (lb)'] = m_payload_lb * payload_distribution['Payload (lb)'] / np.mean(payload_distribution['Payload (lb)'])
     payload_distribution['Payload (kg)'] = payload_distribution['Payload (lb)']*KG_PER_LB #payload distribution in kgs
     return payload_distribution
 
@@ -173,7 +189,8 @@ Inputs:
 """
 def get_electricity_cost_by_year(parameters, mileage, demand_charge, electricity_charge, charging_power):
     electricity_cost_df = parameters.VMT.copy()
-    electricity_cost_df[['Total', 'Normalized capital', 'Normalized fixed', 'Normalized energy charge', 'Normalized demand charge']] = electricity_cost_df.apply(calculate_electricity_unit_by_row, axis=1, mileage=mileage, demand_charge=demand_charge, electricity_charge=electricity_charge, charging_power=charging_power)     # $/kWh
+    lifetime_energy_demand = calculate_lifetime_energy_demand(parameters.VMT, mileage)
+    electricity_cost_df[['Total', 'Normalized capital', 'Normalized fixed', 'Normalized energy charge', 'Normalized demand charge']] = electricity_cost_df.apply(calculate_electricity_unit_by_row, axis=1, mileage=mileage, demand_charge=demand_charge, electricity_charge=electricity_charge, charging_power=charging_power, lifetime_energy_demand=lifetime_energy_demand)     # $/kWh
     return electricity_cost_df
     
 """
@@ -285,7 +302,7 @@ Inputs:
     - e_bat (float): Energy capacity of the truck battery, in kWh
     - max_battery_cycles (int): Maximum number of full battery charge-discharge cycles before it needs to be replaced
 """
-def calculate_replacements(VMT_df, mileage, e_bat=825, max_battery_cycles=1500):
+def calculate_replacements(VMT_df, mileage, e_bat=825, max_battery_cycles=1000):
     lifetime_miles_traveled = VMT_df.sum()
     lifetime_kWh_charged = lifetime_miles_traveled * mileage
     lifetime_cycles = lifetime_kWh_charged / e_bat
