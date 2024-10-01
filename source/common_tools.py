@@ -78,3 +78,25 @@ def make_title_string(info_string):
     title_string = space_separated.title()
     return title_string
     
+def get_nacfe_results(truck_name, drivecycle):
+    """
+    Get NACFE results for the given truck and drivecycle
+    """
+    # Collect the battery info extracted from the NACFE data for each truck
+    battery_capacity_df = pd.read_csv('data/pepsi_semi_battery_capacities.csv')
+    
+    # Collect the info extracted from the drivecycle
+    drivecycle_data_df = pd.read_csv(f'data/{truck_name}_drivecycle_data.csv', index_col='Driving event')
+    
+    # Collect NACFE results
+    NACFE_results = {
+        'Battery capacity (kWh)': battery_capacity_df[truck_name].iloc[0],
+        'Battery capacity unc (kWh)': battery_capacity_df[truck_name].iloc[1],
+        'Fuel economy (kWh/mi)': drivecycle_data_df['Fuel economy (kWh/mile)'].loc[drivecycle],
+        'Fuel economy unc (kWh/mi)': drivecycle_data_df['Fuel economy unc (kWh/mile)'].loc[drivecycle],
+        'Range (miles)': drivecycle_data_df['Range (miles)'].loc[drivecycle],
+        'Range unc (miles)': drivecycle_data_df['Range unc (miles)'].loc[drivecycle],
+    }
+    
+    return NACFE_results
+    
