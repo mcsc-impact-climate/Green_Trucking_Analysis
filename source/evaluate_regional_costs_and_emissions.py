@@ -3,6 +3,7 @@ import json
 import copy
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 G_PER_LB = 453.592
@@ -48,13 +49,13 @@ Inputs:
     - BAs (list): List containing the balancing authorities for which to plot emissions per mile breakdowns
     - identifier_str (string): If not None, adds a string identifier to the name of the saved plot
 """
-def plot_emissions_per_mile_breakdown(emissions_per_mi_geojson, BAs=['ERCT', 'CAMX', 'NEWE', 'NYUP'], identifier_str=None):
-    emissions_to_plot_df = pd.DataFrame(columns=['BA', 'GHGs manufacturing (gCO2/mi)', 'GHGs grid (gCO2/mi)'])
+def plot_emissions_per_mile_breakdown(emissions_per_mi_geojson, states=['CA', 'TX', 'MA', 'IA'], identifier_str=None):
+    emissions_to_plot_df = pd.DataFrame(columns=['State', 'GHGs manufacturing (gCO2/mi)', 'GHGs grid (gCO2/mi)'])
     for feature in emissions_per_mi_geojson['features']:
-        for BA in BAs:
-            if 'ZipSubregi' in feature['properties'] and feature['properties']['ZipSubregi'] == BA:
+        for state in states:
+            if 'STUSPS' in feature['properties'] and feature['properties']['STUSPS'] == state:
                 emissions_per_mile_dict = {
-                    'BA': [BA],
+                    'State': [state],
                     'GHGs manufacturing (gCO2/mi)': [feature['properties']['C_mi_man']],
                     'GHGs grid (gCO2/mi)': [feature['properties']['C_mi_grid']],
                 }
@@ -62,10 +63,10 @@ def plot_emissions_per_mile_breakdown(emissions_per_mi_geojson, BAs=['ERCT', 'CA
     
     # Plot as a bar plot
     fig, ax = plt.subplots(figsize=(8, 6))
-    ax.tick_params(axis='both', which='major', labelsize=15)
-    ax.set_xlabel('Balancing Authority', fontsize=18)
-    ax.set_ylabel('Lifecycle emissions per mile (g CO2e/mile)', fontsize=17)
-    ind = emissions_to_plot_df['BA']
+    ax.tick_params(axis='both', which='major', labelsize=18)
+    ax.set_xlabel('State', fontsize=22)
+    ax.set_ylabel('Lifecycle emissions (g CO2e / mile)', fontsize=22)
+    ind = emissions_to_plot_df['State']
     
     # Stack each component of the costs / mile
     p1 = ax.bar(ind, emissions_to_plot_df['GHGs manufacturing (gCO2/mi)'], label='Manufacturing')
@@ -74,14 +75,16 @@ def plot_emissions_per_mile_breakdown(emissions_per_mi_geojson, BAs=['ERCT', 'CA
     
     # Adjust the y range to make space for the legend
     ymin, ymax = ax.get_ylim()
-    ax.set_ylim(ymin, ymax*1.1)
+    ax.set_ylim(ymin, ymax*1.3)
     
-    ax.legend(fontsize=16)
+    ax.legend(fontsize=18)
     plt.tight_layout()
     if identifier_str:
         plt.savefig(f'plots/emissions_per_mile_{identifier_str}.png')
+        plt.savefig(f'plots/emissions_per_mile_{identifier_str}.pdf')
     else:
         plt.savefig(f'plots/emissions_per_mile.png')
+        plt.savefig(f'plots/emissions_per_mile.pdf')
 
 """
 Function: Loop through all the grid balancing authorities to evaluate the emissions per mile using the regional grid carbon intensity
@@ -89,7 +92,7 @@ Inputs:
     - average_payload (float): Average payload of shipments carried by the truck
     - average_VMT (float): Average annual miles traveled over the truck's lifetime
 """
-def make_emissions_per_mi_geo(average_payload, average_VMT, grid_intensity_geojson, filename_prefix=''):
+def make_emissions_per_mi_geo(average_payload, average_VMT, grid_intensity_geojson, filename_prefix='', plot_validation=False):
     for feature in grid_intensity_geojson['features']:
         # Check if the 'CO2_rate' field exists in the properties
         if 'CO2_rate' in feature['properties'] and not (feature['properties']['CO2_rate'] is None):
@@ -101,8 +104,10 @@ def make_emissions_per_mi_geo(average_payload, average_VMT, grid_intensity_geojs
 
     with open(f'geojsons/{filename_prefix}emissions_per_mile_payload{average_payload}_avVMT{average_VMT}.geojson', mode='w') as emissions_geojson:
         json.dump(grid_intensity_geojson, emissions_geojson, indent=4)
-    ## Plot emissions/mile breakdown for a few sample balancing authorities
-    #plot_emissions_per_mile_breakdown(grid_intensity_geojson)
+        
+    # Plot emissions/mile breakdown for a few sample balancing authorities
+    if plot_validation:
+        plot_emissions_per_mile_breakdown(grid_intensity_geojson)
 
 #################################################################################
 
@@ -141,43 +146,90 @@ Inputs:
     - identifier_str (string): If not None, adds a string identifier to the name of the saved plot
 """
 def plot_costs_per_mile_breakdown(costs_per_mi_geojson, states=['CA', 'TX', 'MA', 'IA'], identifier_str=None):
-    rates_to_plot_df = pd.DataFrame(columns=['State', 'Total capital ($/mi)', 'Total electricity ($/mi)', 'Total labor ($/mi)', 'Other OPEXs ($/mi)'])
+    rates_to_plot_ev_df = pd.DataFrame(columns=['State', 'Total capital ($/mi)', 'Total electricity or fuel ($/mi)', 'Total labor ($/mi)', 'Other OPEXs ($/mi)'])
+    rates_to_plot_diesel_df = pd.DataFrame(columns=['State', 'Total capital ($/mi)', 'Total electricity or fuel ($/mi)', 'Total labor ($/mi)', 'Other OPEXs ($/mi)'])
+    
     for feature in costs_per_mi_geojson['features']:
         for state in states:
             if 'STUSPS' in feature['properties'] and feature['properties']['STUSPS'] == state:
-                costs_per_mile_dict = {
-                    'State': [state],
-                    'Total capital ($/mi)': [feature['properties']['$_mi_cap']],
-                    'Total electricity ($/mi)': [feature['properties']['$_mi_el']],
-                    'Total labor ($/mi)': [feature['properties']['$_mi_lab']],
-                    'Other OPEXs ($/mi)': [feature['properties']['$_mi_op']],
+                costs_per_mile_ev_dict = {
+                    'State': state,
+                    'Total capital ($/mi)': feature['properties']['$_mi_cap'],
+                    'Total electricity or fuel ($/mi)': feature['properties']['$_mi_el'],
+                    'Total labor ($/mi)': feature['properties']['$_mi_lab'],
+                    'Other OPEXs ($/mi)': feature['properties']['$_mi_op'],
                 }
-                rates_to_plot_df = pd.concat([rates_to_plot_df, pd.DataFrame(costs_per_mile_dict)], ignore_index=True)
+                costs_per_mile_diesel_dict = {
+                    'State': state,
+                    'Total capital ($/mi)': feature['properties']['dies_cap'],
+                    'Total electricity or fuel ($/mi)': feature['properties']['dies_fu'],
+                    'Total labor ($/mi)': feature['properties']['dies_lab'],
+                    'Other OPEXs ($/mi)': feature['properties']['dies_op'],
+                }
+                rates_to_plot_ev_df = pd.concat([rates_to_plot_ev_df, pd.DataFrame([costs_per_mile_ev_dict])], ignore_index=True)
+                rates_to_plot_diesel_df = pd.concat([rates_to_plot_diesel_df, pd.DataFrame([costs_per_mile_diesel_dict])], ignore_index=True)
 
-    # Plot as a bar plot
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.tick_params(axis='both', which='major', labelsize=15)
-    ax.set_xlabel('State', fontsize=18)
-    ax.set_ylabel('Lifecycle cost per mile ($/mile)', fontsize=18)
-    ind = rates_to_plot_df['State']
+    # Plot side-by-side bar plot with solid and x fill
+    fig, ax = plt.subplots(figsize=(10, 8))
+    ax.tick_params(axis='both', which='major', labelsize=18)
+    ax.set_xlabel('State', fontsize=22)
+    ax.set_ylabel('Lifecycle cost ($/mile)', fontsize=22)
 
-    # Stack each component of the costs / mile
-    p1 = ax.bar(ind, rates_to_plot_df['Total capital ($/mi)'], label='Capital')
-    p2 = ax.bar(ind, rates_to_plot_df['Total labor ($/mi)'], bottom=rates_to_plot_df['Total capital ($/mi)'], label='Labor')
-    p3 = ax.bar(ind, rates_to_plot_df['Other OPEXs ($/mi)'], bottom=rates_to_plot_df['Total capital ($/mi)'] + rates_to_plot_df['Total labor ($/mi)'], label='Other OPEX')
-    p4 = ax.bar(ind, rates_to_plot_df['Total electricity ($/mi)'], bottom=rates_to_plot_df['Total capital ($/mi)'] + rates_to_plot_df['Total labor ($/mi)'] + rates_to_plot_df['Other OPEXs ($/mi)'], label='Electricity')
+    ind = np.arange(len(states))  # the x locations for the states
+    width = 0.35  # the width of the bars
+
+    # Colors for both EV and diesel bars
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
+
+    # EV bars (solid fill)
+    p1 = ax.bar(ind - width/2, rates_to_plot_ev_df['Total capital ($/mi)'], width, color=colors[0], label='Capital')
+    p2 = ax.bar(ind - width/2, rates_to_plot_ev_df['Total labor ($/mi)'], width,
+                bottom=rates_to_plot_ev_df['Total capital ($/mi)'], color=colors[1], label='Labor')
+    p3 = ax.bar(ind - width/2, rates_to_plot_ev_df['Other OPEXs ($/mi)'], width,
+                bottom=rates_to_plot_ev_df['Total capital ($/mi)'] + rates_to_plot_ev_df['Total labor ($/mi)'],
+                color=colors[2], label='Other OPEX')
+    p4 = ax.bar(ind - width/2, rates_to_plot_ev_df['Total electricity or fuel ($/mi)'], width,
+                bottom=rates_to_plot_ev_df['Total capital ($/mi)'] + rates_to_plot_ev_df['Total labor ($/mi)'] +
+                       rates_to_plot_ev_df['Other OPEXs ($/mi)'], color=colors[3], label='Electricity')
+
+    # Diesel bars (x fill)
+    p5 = ax.bar(ind + width/2, rates_to_plot_diesel_df['Total capital ($/mi)'], width, color=colors[0], hatch='xx')
+    p6 = ax.bar(ind + width/2, rates_to_plot_diesel_df['Total labor ($/mi)'], width,
+                bottom=rates_to_plot_diesel_df['Total capital ($/mi)'], color=colors[1], hatch='xx')
+    p7 = ax.bar(ind + width/2, rates_to_plot_diesel_df['Other OPEXs ($/mi)'], width,
+                bottom=rates_to_plot_diesel_df['Total capital ($/mi)'] + rates_to_plot_diesel_df['Total labor ($/mi)'],
+                color=colors[2], hatch='xx')
+    p8 = ax.bar(ind + width/2, rates_to_plot_diesel_df['Total electricity or fuel ($/mi)'], width,
+                bottom=rates_to_plot_diesel_df['Total capital ($/mi)'] + rates_to_plot_diesel_df['Total labor ($/mi)'] +
+                       rates_to_plot_diesel_df['Other OPEXs ($/mi)'], color=colors[3], hatch='xx')
+
     ax.set_xticks(ind)
+    ax.set_xticklabels(states)
 
     # Adjust the y range to make space for the legend
     ymin, ymax = ax.get_ylim()
-    ax.set_ylim(ymin, ymax*1.5)
+    ax.set_ylim(ymin, ymax * 1.3)
 
-    ax.legend(fontsize=15)
+    # Create a legend for the colors (Capital, Labor, Other OPEX, Electricity)
+    color_legend = ax.legend(fontsize=18, loc='upper left')
+
+    # Add an additional legend for solid and hashed fill (EV vs Diesel)
+    solid_patch = plt.Rectangle((0, 0), 1, 1, facecolor='white', edgecolor='black', label='EV')
+    hashed_patch = plt.Rectangle((0, 0), 1, 1, facecolor='white', edgecolor='black', hatch='xx', label='Diesel')
+    
+    fill_legend = plt.legend(handles=[solid_patch, hashed_patch], loc='upper right', fontsize=18, title='Powertrain Type', title_fontsize=22)
+
+    # Add the first legend back
+    ax.add_artist(color_legend)
+
     plt.tight_layout()
+
     if identifier_str:
         plt.savefig(f'plots/costs_per_mile_{identifier_str}.png')
+        plt.savefig(f'plots/costs_per_mile_{identifier_str}.pdf')
     else:
         plt.savefig(f'plots/costs_per_mile.png')
+        plt.savefig(f'plots/costs_per_mile.pdf')
 
 """
 Function: Collect geojsons containing state-level electriity price and demand charge geojsons used to calculate cost per mile
@@ -205,7 +257,7 @@ Inputs:
     - average_VMT (float): Average annual miles traveled over the truck's lifetime
 Note: The state features in the electricity rate and demand charge geojsons are in the same order because they're both derived from the same base shapefile
 """
-def make_costs_per_mi_geo(average_payload, average_VMT, max_charging_power, electricity_rates_geojson, demand_charges_geojson, diesel_prices_geojson):
+def make_costs_per_mi_geo(average_payload, average_VMT, max_charging_power, electricity_rates_geojson, demand_charges_geojson, diesel_prices_geojson, plot_validation=False):
     costs_per_mi_geojson = copy.deepcopy(electricity_rates_geojson)
     for electricity_rate_feature, demand_charge_feature, diesel_price_feature, cost_per_mi_feature in zip(electricity_rates_geojson['features'], demand_charges_geojson['features'], diesel_prices_geojson['features'], costs_per_mi_geojson['features'], ):
         # Check if the 'STUSPS' field (state abbreviation) exists in the properties
@@ -267,43 +319,9 @@ def make_costs_per_mi_geo(average_payload, average_VMT, max_charging_power, elec
     with open(f'geojsons/costs_per_mile_payload{average_payload}_avVMT{average_VMT}_maxChP{max_charging_power}.geojson', mode='w') as cost_geojson:
         json.dump(costs_per_mi_geojson, cost_geojson, indent=4)
         
-    ## Plot cost/mile breakdown for a few sample states
-    #plot_costs_per_mile_breakdown(costs_per_mi_geojson)
-    
-"""
-Function: Loop through all states to evaluate the costs per mile for diesel trucking using the state-level electricity price and demand charge
-Inputs:
-    - average_payload (float): Average payload of shipments carried by the truck
-    - average_VMT (float): Average annual miles traveled over the truck's lifetime
-Note: The state features in the electricity rate and demand charge geojsons are in the same order because they're both derived from the same base shapefile
-"""
-def make_costs_per_mi_diesel_geo(average_payload, average_VMT, diesel_prices_geojson):
-    costs_per_mi_geojson = copy.deepcopy(diesel_prices_geojson)
-    for diesel_price_feature, cost_per_mi_feature in zip(diesel_prices_geojson['features'], costs_per_mi_geojson['features']):
-        # Check if the 'STUSPS' field (state abbreviation) exists in the properties
-        if 'dies_price' in diesel_price_feature['properties']:
-
-            del cost_per_mi_feature['properties']['dies_price']
-
-            if diesel_price_feature['properties']['dies_price'] is None:
-                cost_per_mi_feature['properties']['$_mi_tot'] = None
-                cost_per_mi_feature['properties']['$_mi_cap'] = None
-                cost_per_mi_feature['properties']['$_mi_fuel'] = None
-                cost_per_mi_feature['properties']['$_mi_lab'] = None
-                cost_per_mi_feature['properties']['$_mi_op'] = None
-            else:
-                costs_per_mile = get_costs_per_mile_diesel(diesel_price_feature['properties']['dies_price'], average_payload, average_VMT)
-                cost_per_mi_feature['properties']['$_mi_tot'] = costs_per_mile['TCO ($/mi)']
-                cost_per_mi_feature['properties']['$_mi_cap'] = costs_per_mile['Total capital ($/mi)']
-                cost_per_mi_feature['properties']['$_mi_fuel'] = costs_per_mile['Total fuel ($/mi)']
-                cost_per_mi_feature['properties']['$_mi_lab'] = costs_per_mile['Total labor ($/mi)']
-                cost_per_mi_feature['properties']['$_mi_op'] = costs_per_mile['Other OPEXs ($/mi)']
-
-    with open(f'geojsons/costs_per_mile_diesel_payload{average_payload}_avVMT{average_VMT}.geojson', mode='w') as cost_geojson:
-        json.dump(costs_per_mi_geojson, cost_geojson, indent=4)
-        
-    ## Plot cost/mile breakdown for a few sample states
-    #plot_costs_per_mile_breakdown(costs_per_mi_geojson)
+    # Plot cost/mile breakdown for a few sample states
+    if plot_validation:
+        plot_costs_per_mile_breakdown(costs_per_mi_geojson)
     
 def parallel_make_emissions(average_payload, average_VMT, grid_intensity_geojson_ba, grid_intensity_geojson_state):
     # Function to execute both tasks sequentially for a given set of arguments
@@ -315,10 +333,19 @@ def parallel_make_costs(average_payload, average_VMT, max_charging_power, electr
 
     
 def main():
+
     grid_intensity_geojson_ba = collect_grid_intensity_geo('ba')
     grid_intensity_geojson_state = collect_grid_intensity_geo('state')
     
     electricity_rates_geojson, demand_charges_geojson, diesel_prices_geojson = collect_cost_geos()
+    
+    ############################# Make validation plots #############################
+    average_payload_default = 40000
+    average_VMT_default = 100000
+    max_charging_power_default = 400
+    make_costs_per_mi_geo(average_payload_default, average_VMT_default, max_charging_power_default, electricity_rates_geojson, demand_charges_geojson, diesel_prices_geojson, plot_validation=True)
+    make_emissions_per_mi_geo(average_payload_default, average_VMT_default, grid_intensity_geojson_state, filename_prefix='state_', plot_validation=True)
+    #################################################################################
     
     average_payloads = [0, 10000, 20000, 30000, 40000, 50000]
     average_VMTs = [40000, 70000, 100000, 130000, 160000, 190000]
@@ -330,7 +357,7 @@ def main():
         futures_emissions = {}
         futures_costs = {}
         
-        """
+        
         # Evaluate emissions in parallel
         for average_payload in average_payloads:
             for average_VMT in average_VMTs:
@@ -348,7 +375,7 @@ def main():
             except Exception as exc:
                 print(f'Generated an exception: {exc} for payload: {average_payload}, VMT: {average_VMT}')
         
-        """
+        
         # Evaluate EV trucking costs in parallel
         for average_payload in average_payloads:
             for average_VMT in average_VMTs:
@@ -366,7 +393,6 @@ def main():
                 # Process result if needed
             except Exception as exc:
                 print(f'Generated an exception: {exc} for payload: {average_payload}, VMT: {average_VMT}, max charging power: {max_charging_power}')
-        
 
 if __name__ == '__main__':
     main()
