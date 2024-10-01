@@ -13,7 +13,6 @@ class cost:
     self.parameters = parameters
 
   def get_capital(self, vehicle_model_results, replacements, capital_cost_unit, battery_unit_cost, discountfactor, vehicle_purchase_price=False):
-    #We consider replacement of NMC battery in the 5th year of truck's lifetime
     # DMM: Costs are all per unit power rating, but if you find absolute cost that's fine too
     # DMM: The motor and inverter cost might be underestimated for Tesla Semi because there are actually 3 smaller motors rather than 1 large motor
     if vehicle_purchase_price:
