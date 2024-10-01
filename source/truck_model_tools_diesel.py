@@ -35,7 +35,7 @@ class read_parameters:
     
     # Efficiencies
     self.eta_e = float(df_truck_params['Value'].loc['Engine efficiency'])
-    self.eta_d = float(df_truck_params['Value'].loc['Drivetrain efficiency'])
+    self.eta_t = float(df_truck_params['Value'].loc['Transmission efficiency'])
     
     # Drag and resistance
     self.cd = float(df_truck_params['Value'].loc['Drag coefficient'])
@@ -51,7 +51,7 @@ class read_parameters:
     self.discountrate = float(df_economy_params['Value'].loc['Discount rate'])
 
 class share_parameters:
-  def __init__(self,m_ave_payload, m_max, m_truck, m_guess, p_aux, p_motor_max, cd, cr, a_cabin, g, rho_air, eta_e, eta_d, eta_grid_transmission, VMT, discountrate):
+  def __init__(self,m_ave_payload, m_max, m_truck, m_guess, p_aux, p_motor_max, cd, cr, a_cabin, g, rho_air, eta_e, eta_t, eta_grid_transmission, VMT, discountrate):
 
     self.m_ave_payload=m_ave_payload
     self.m_max = m_max
@@ -66,7 +66,7 @@ class share_parameters:
     self.rho_air = rho_air
 
     self.eta_e = eta_e
-    self.eta_d = eta_d
+    self.eta_t = eta_t
     self.eta_grid_transmission = eta_grid_transmission
 
     self.VMT = VMT
@@ -116,14 +116,14 @@ class truck_model:
       ag = self.parameters.g*np.sin(road_angle[i]) #acceleration from rolling resistance in N
       fd = self.parameters.rho_air*self.parameters.a_cabin*self.parameters.cd*np.power(simulated_vehicle_speeds[i], 2) / 2 #force from aerodynamic drag in N
       
-      maximum_acceleration = ((self.parameters.p_motor_max*self.parameters.eta_e*self.parameters.eta_d/simulated_vehicle_speeds[i]) - ar*m - ag*m - fd)/m if simulated_vehicle_speeds[i] > 0 else 1e9
+      maximum_acceleration = ((self.parameters.p_motor_max*self.parameters.eta_e*self.parameters.eta_t/simulated_vehicle_speeds[i]) - ar*m - ag*m - fd)/m if simulated_vehicle_speeds[i] > 0 else 1e9
       a=min(target_acceleration,maximum_acceleration) #minimum acceleration between target acceleration to follow drive cycle versus maximum acceleration of truck at Pmax
       
       acc_request_wheels = (ar + ag + fd/m + a) * simulated_vehicle_speeds[i] #total acceleration request at the wheels in W
     
       # Find the slope and y-intercept for the approximate linear relationship power_request_motor = power_request_motor_slope * m + power_request_motor_intercept
-      power_request_motor_slopes.append((ar + ag + a) * simulated_vehicle_speeds[i] / (self.parameters.eta_e*self.parameters.eta_d) if acc_request_wheels > 0 else 0)
-      power_request_motor_intercepts.append(fd * simulated_vehicle_speeds[i] / (self.parameters.eta_e*self.parameters.eta_d) if acc_request_wheels > 0 else 0)
+      power_request_motor_slopes.append((ar + ag + a) * simulated_vehicle_speeds[i] / (self.parameters.eta_e*self.parameters.eta_t) if acc_request_wheels > 0 else 0)
+      power_request_motor_intercepts.append(fd * simulated_vehicle_speeds[i] / (self.parameters.eta_e*self.parameters.eta_t) if acc_request_wheels > 0 else 0)
       
       simulated_vehicle_speeds.append(simulated_vehicle_speeds[i] + a * delta_t[i]) #update vehicle speed for next iteration
 
