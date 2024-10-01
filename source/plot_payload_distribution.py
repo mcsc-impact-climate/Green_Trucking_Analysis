@@ -8,29 +8,47 @@ import pandas as pd
 from common_tools import make_title_string
 import matplotlib.pyplot as plt
 
-def plot_payload_distribution(payload_variable = "Payload (lb)"):
+def plot_payload_distribution(payload_variable = "Predicted Payload (lb)", powertrain="ev"):
     """
     Produces box plots of the payload or GVW evaluated by the truck simulation model.
     
     Parameters
     ----------
-    payload_variable (string): Variable to plot (currently must be either 'Payload (lb)' or 'Gross Vehicle Weight (lb)'.
+    payload_variable (string): Variable to plot (currently must be one of 'Predicted Payload (lb)' or 'Predicted GVW (lb)', 'Linear Slope (kWh/mi/kiloton)', or 'Y Intercept (kWh/mi)'.
 
     Returns
     -------
     top_dir (string): Path to the top level of the git repo
     """
-    
-    if not ( payload_variable == "Payload (lb)" or payload_variable == "Gross Vehicle Weight (lb)" ):
-        Exception(f"payload_variable '{payload_variable}' cannot be passed to function plot_payload_distribution. Acceptable values are 'Payload (lb)' or 'Gross Vehicle Weight (lb)'.")
+
+    allowed_variables_ev = ["Predicted Payload (lb)", "Predicted GVW (lb)", "Linear Slope (kWh/mi/kiloton)", "Y Intercept (kWh/mi)"]
+    allowed_variables_diesel = ["Linear Slope (gal/mile/kiloton)", "Y Intercept (gal/mile)"]
+
+    if powertrain == "ev":
+        if payload_variable not in allowed_variables_ev:
+            raise Exception(f"payload_variable '{payload_variable}' cannot be passed to function plot_payload_distribution. Acceptable values are {', '.join(allowed_variables_ev)}")
+    elif powertrain == "diesel":
+        if payload_variable not in allowed_variables_diesel:
+            raise Exception(f"payload_variable '{payload_variable}' cannot be passed to function plot_payload_distribution. Acceptable values are {', '.join(allowed_variables_diesel)}")
         
     payload_variable_save = ""
-    if payload_variable == "Payload (lb)":
+    if payload_variable == "Predicted Payload (lb)":
         payload_variable_save = "payload"
-    elif payload_variable == "Gross Vehicle Weight (lb)":
+    elif payload_variable == "Predicted GVW (lb)":
         payload_variable_save = "gvw"
+    elif payload_variable == "Linear Slope (kWh/mi/kiloton)":
+        payload_variable_save = "slope"
+    elif payload_variable == "Y Intercept (kWh/mi)":
+        payload_variable_save = "intercept"
+    elif payload_variable == "Linear Slope (gal/mile/kiloton)":
+        payload_variable_save = "slope"
+    elif payload_variable == "Y Intercept (gal/mile)":
+        payload_variable_save = "intercept"
     
-    payload_fit_results = pd.read_csv("tables/payload_vs_mileage_semi.csv")
+    if powertrain == "ev":
+        payload_fit_results = pd.read_csv("tables/linear_energy_economy_params_semi.csv")
+    elif powertrain == "diesel":
+        payload_fit_results = pd.read_csv("tables/linear_mpg_params_diesel_daycab.csv")
 
     all_evaluated_gvws = payload_fit_results[payload_variable]
     truck_names = sorted(payload_fit_results["Truck"].unique())
@@ -75,13 +93,17 @@ def plot_payload_distribution(payload_variable = "Payload (lb)"):
         ax.text(x_position, y_position, f'{n_drivecycles} drivecycles', ha='center', va='bottom', fontsize=14)
 
     plt.tight_layout()
-    plt.savefig(f'plots/{payload_variable_save}_distribution.png', dpi=300)
-    plt.savefig(f'plots/{payload_variable_save}_distribution.pdf')
+    plt.savefig(f'plots/{payload_variable_save}_distribution_{powertrain}.png', dpi=300)
+    plt.savefig(f'plots/{payload_variable_save}_distribution_{powertrain}.pdf')
     plt.close()
 
 def main():
-    plot_payload_distribution("Payload (lb)")
-    plot_payload_distribution("Gross Vehicle Weight (lb)")
+    plot_payload_distribution("Predicted Payload (lb)", "ev")
+    plot_payload_distribution("Predicted GVW (lb)", "ev")
+    plot_payload_distribution("Linear Slope (kWh/mi/kiloton)", "ev")
+    plot_payload_distribution("Y Intercept (kWh/mi)", "ev")
+    plot_payload_distribution("Linear Slope (gal/mile/kiloton)", "diesel")
+    plot_payload_distribution("Y Intercept (gal/mile)", "diesel")
 
 if __name__ == '__main__':
     main()
