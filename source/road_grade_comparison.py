@@ -10,9 +10,9 @@ import numpy as np
 import scipy as scipy
 import matplotlib.pyplot as plt
 from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
-import truck_model_tools_orig as truck_model_tools
-import costing_tools_orig as costing_tools
-import emissions_tools_orig as emissions_tools
+import retired.truck_model_tools_orig as truck_model_tools
+import retired.costing_tools_orig as costing_tools
+import retired.emissions_tools_orig as emissions_tools
 
 new_rc_params = {'text.usetex': False,
 "svg.fonttype": 'none'
@@ -25,6 +25,7 @@ SECONDS_PER_HOUR = 3600
 SECONDS_PER_MINUTE = 60
 M_PER_MILE = 1609.34
 S_PER_H = 3600
+G_PER_KG = 1000
 
 ######################################### Obtain model parameters #########################################
 # Annual VMT from VIUS 2002
@@ -81,12 +82,12 @@ battery_unit_cost_LFP = [float(df_scenarios['LFP battery unit cost'].iloc[0])] #
 
 ########### Road grade over time ###########
 fig, axs = plt.subplots(2, 1, figsize=(10, 7), gridspec_kw={'height_ratios': [2, 1]})  # 2 rows, 1 column
-axs[0].set_title('Long-haul Drivecycle', fontsize=18)
-axs[0].set_ylabel('Speed (mph)', fontsize=16)
-axs[1].set_ylabel('Road grade (%)', fontsize=16)
-axs[1].set_xlabel('Drive time (minutes)', fontsize=16)
-axs[0].tick_params(axis='both', which='major', labelsize=14)
-axs[1].tick_params(axis='both', which='major', labelsize=14)
+#axs[0].set_title('Long-haul Drivecycle', fontsize=18)
+axs[0].set_ylabel('Speed (mph)', fontsize=24)
+axs[1].set_ylabel('Grade (%)', fontsize=24)
+axs[1].set_xlabel('Drive time (minutes)', fontsize=24)
+axs[0].tick_params(axis='both', which='major', labelsize=20)
+axs[1].tick_params(axis='both', which='major', labelsize=20)
 
 # Add major/minor ticks and gridlines
 axs[0].xaxis.set_major_locator(MultipleLocator(100))
@@ -98,9 +99,10 @@ axs[1].xaxis.set_minor_locator(MultipleLocator(20))
 axs[1].grid(which='minor', linestyle='--', linewidth=0.5, color='gray')
 axs[1].grid(which='major', linestyle='-', linewidth=0.5, color='black')
 
-axs[0].plot(df_drivecycle['Time (s)']/SECONDS_PER_MINUTE, df_drivecycle['Vehicle speed (m/s)'] * S_PER_H / M_PER_MILE)
-axs[1].plot(df_drivecycle['Time (s)']/SECONDS_PER_MINUTE, df_drivecycle['Road grade (%)'], color='green')
+axs[0].plot(df_drivecycle['Time (s)']/SECONDS_PER_MINUTE, df_drivecycle['Vehicle speed (m/s)'] * S_PER_H / M_PER_MILE, linewidth=2)
+axs[1].plot(df_drivecycle['Time (s)']/SECONDS_PER_MINUTE, df_drivecycle['Road grade (%)'], color='green', linewidth=2)
 plt.savefig('plots/long_haul_drivecycle.png')
+plt.savefig('plots/long_haul_drivecycle.pdf')
 plt.close()
 ############################################
 
@@ -155,7 +157,7 @@ for drivecycle in drivecycles:
     # Emissions model results
     results[drivecycle]['Emissions Model'] = {}
     
-    GHG_emissions_LFP = emissions_tools.emission(parameters).get_WTW(vehicle_model_results_LFP, GHG_bat_unit_LFP,  replacements_LFP)
+    GHG_emissions_LFP = emissions_tools.emission(parameters).get_WTW(vehicle_model_results_LFP, GHG_bat_unit_LFP,  replacements_LFP) / G_PER_KG
     
     for emissions_component in GHG_emissions_LFP:
         emissions_component_short = emissions_component.replace('GHGs ', '').split('(')[0].capitalize()
@@ -164,6 +166,10 @@ for drivecycle in drivecycles:
     # Costing model results
     results[drivecycle]['Costing Model'] = {}
     TCS_LFP = costing_tools.cost(parameters).get_TCS(vehicle_model_results_LFP, capital_cost_unit, battery_unit_cost_LFP, operating_cost_unit, electricity_unit, replacements_LFP, GHG_emissions_LFP, SCC)
+    
+    # Drop the GHG emissions penalty
+    TCS_LFP['TCO ($/mi)'] = TCS_LFP['TCS ($/mi)'] - TCS_LFP['GHGs emissions penalty ($/mi)']
+    TCS_LFP = TCS_LFP.drop(['TCS ($/mi)', 'GHGs emissions penalty ($/mi)'], axis=1)
     
     for cost_component in TCS_LFP:
         cost_component_short = cost_component.split('(')[0].replace('Total ', '').replace('GHGs ', '').replace(' ', '\n')
@@ -186,12 +192,12 @@ for category in ['Emissions Model', 'Costing Model']:
     title_label = category.split(' ')[0]
     #axs[0].set_title(f'Impact of Road Grade on Present Day {title_label}', fontsize=18)
     if category == 'Costing Model':
-        axs[0].set_ylabel('Cost ($/mile)', fontsize=16)
+        axs[0].set_ylabel('Cost ($/mile)', fontsize=20)
     else:
-        axs[0].set_ylabel('Emissions (gCO2e/mile)', fontsize=16)
-    axs[1].set_ylabel('Relative Impact (%)', fontsize=16)
-    axs[0].tick_params(axis='both', which='major', labelsize=14)
-    axs[1].tick_params(axis='both', which='major', labelsize=14)
+        axs[0].set_ylabel('Emissions (kg CO2e / mile)', fontsize=20)
+    axs[1].set_ylabel('Impact (%)', fontsize=20)
+    axs[0].tick_params(axis='both', which='major', labelsize=18)
+    axs[1].tick_params(axis='both', which='major', labelsize=18)
 
     # Add major/minor ticks and gridlines
     axs[1].xaxis.set_major_locator(MultipleLocator(1))
@@ -208,9 +214,10 @@ for category in ['Emissions Model', 'Costing Model']:
     axs[1].set_xticklabels(results['With road grade'][category].keys())
     axs[1].errorbar(indices+1, results['Percent Difference'][category].values(), xerr=0.25, fmt='o', color='green', linewidth=2)
     save_label = category.split(' ')[0].lower()
-    axs[0].legend(fontsize=16)
-    #plt.tight_layout()
+    axs[0].legend(fontsize=18)
+    plt.tight_layout()
     plt.savefig(f'plots/results_comparison_{save_label}.png', dpi=300)
+    plt.savefig(f'plots/results_comparison_{save_label}.pdf')
     plt.close()
     
 ###########################################################################################################
