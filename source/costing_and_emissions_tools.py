@@ -276,7 +276,7 @@ Inputs:
     - e_bat (float): Energy capacity of the truck battery, in kWh
     - m_truck_max_lb (float): Maximum allowable GVW of the truck (82000lb for EVs in California)
 """
-def evaluate_emissions(m_payload_lb, grid_emission_intensity, average_VMT=85000, grid_emission_intensity_year=2020, e_bat=825, battery_chemistry='NMC', m_truck_max_lb=82000):
+def evaluate_emissions(m_payload_lb, grid_emission_intensity, average_VMT=85000, grid_emission_intensity_year=2022, truck_simulation_start_year=2024, e_bat=825, battery_chemistry='NMC', m_truck_max_lb=82000):
     
     # Evaluate parameters and vehicle model results for the given payload
     parameters, vehicle_model_results_dict = get_vehicle_model_results(m_payload_lb, average_VMT)
@@ -290,7 +290,7 @@ def evaluate_emissions(m_payload_lb, grid_emission_intensity, average_VMT=85000,
     battery_params_dict['Replacements'] = calculate_replacements(parameters.VMT['VMT (miles)'], vehicle_model_results_dict['Fuel economy (kWh/mi)'])
     
     # Calculate GHG emissions per mile
-    GHG_emissions = emissions_tools.emission(parameters).get_WTW(vehicle_model_results_dict, battery_params_dict['Manufacturing emissions (CO2/kWh)'],  battery_params_dict['Replacements'], grid_intensity_start=grid_emission_intensity, start_year=grid_emission_intensity_year)
+    GHG_emissions = emissions_tools.emission(parameters).get_WTW(vehicle_model_results_dict, battery_params_dict['Manufacturing emissions (CO2/kWh)'],  battery_params_dict['Replacements'], grid_intensity_start=grid_emission_intensity, grid_intensity_start_year=grid_emission_intensity_year, start_year=truck_simulation_start_year)
     
     return GHG_emissions
 
