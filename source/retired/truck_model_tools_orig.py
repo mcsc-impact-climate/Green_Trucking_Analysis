@@ -147,7 +147,7 @@ def extract_drivecycle_data(f_drivecycle):
     df['Acceleration (m/s2)'] = df['Vehicle speed (m/s)'].diff()/df['Time (s)'].diff() #calculate acceleration in m/s2
     df['Acceleration (m/s2)'] = df['Acceleration (m/s2)'].fillna(0) #first data point as NaN, we replace with zero
     df['Road angle'] = df['Road grade (%)'].apply(lambda x: np.arctan(x / 100)) #convert road grade to road angle RG=100 tan(road angle)
-    df['Cumulative distance (m)']= integrate.cumtrapz(df['Vehicle speed (m/s)'],df['Time (s)'], initial=0)
+    df['Cumulative distance (m)']= integrate.cumulative_trapezoid(df['Vehicle speed (m/s)'],df['Time (s)'], initial=0)
     
     return df
 
