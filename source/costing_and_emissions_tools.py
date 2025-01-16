@@ -376,3 +376,8 @@ def evaluate_costs_diesel(m_payload_lb, diesel_price=3.67, average_VMT=85000, m_
 #print(get_vehicle_model_results_diesel(60000, 100000))
 #print(evaluate_costs(60000, 0.20, 5))
 #print(evaluate_costs_diesel(60000))
+#parameters, vehicle_model_results_dict = get_vehicle_model_results(m_payload_lb=50000, average_VMT=190000)
+#truck_cost_data = data_collection_tools.read_truck_cost_data(truck_type='EV')
+#discountfactor = 1 / np.power(1 + parameters.discountrate, np.arange(10)) #life time of trucks is 10 years
+#total_CAPEX = costing_tools.cost(parameters).get_capital(vehicle_model_results_dict, 0, truck_cost_data['Capital Costs'], truck_cost_data['Battery Unit Cost ($/kWh)'], discountfactor)
+#print(total_CAPEX)
