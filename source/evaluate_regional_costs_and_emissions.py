@@ -49,7 +49,7 @@ Inputs:
     - BAs (list): List containing the balancing authorities for which to plot emissions per mile breakdowns
     - identifier_str (string): If not None, adds a string identifier to the name of the saved plot
 """
-def plot_emissions_per_mile_breakdown(emissions_per_mi_geojson, states=['CA', 'TX', 'MA', 'IA'], identifier_str=None):
+def plot_emissions_per_mile_breakdown(emissions_per_mi_geojson, states=['CA', 'TX', 'MA', 'IL'], identifier_str=None):
     emissions_to_plot_df = pd.DataFrame(columns=['State', 'GHGs manufacturing (gCO2/mi)', 'GHGs grid (gCO2/mi)'])
     for feature in emissions_per_mi_geojson['features']:
         for state in states:
@@ -145,13 +145,15 @@ Inputs:
     - states (list): List containing the states for which to plot cost per mile breakdowns
     - identifier_str (string): If not None, adds a string identifier to the name of the saved plot
 """
-def plot_costs_per_mile_breakdown(costs_per_mi_geojson, states=['CA', 'TX', 'MA', 'IA'], identifier_str=None):
+def plot_costs_per_mile_breakdown(costs_per_mi_geojson, states=['CA', 'TX', 'MA', 'IL'], identifier_str=None):
     rates_to_plot_ev_df = pd.DataFrame(columns=['State', 'Total capital ($/mi)', 'Total electricity or fuel ($/mi)', 'Total labor ($/mi)', 'Other OPEXs ($/mi)'])
     rates_to_plot_diesel_df = pd.DataFrame(columns=['State', 'Total capital ($/mi)', 'Total electricity or fuel ($/mi)', 'Total labor ($/mi)', 'Other OPEXs ($/mi)'])
     
+    states_ordered=[]
     for feature in costs_per_mi_geojson['features']:
         for state in states:
             if 'STUSPS' in feature['properties'] and feature['properties']['STUSPS'] == state:
+                states_ordered.append(state)
                 costs_per_mile_ev_dict = {
                     'State': state,
                     'Total capital ($/mi)': feature['properties']['$_mi_cap'],
@@ -175,36 +177,37 @@ def plot_costs_per_mile_breakdown(costs_per_mi_geojson, states=['CA', 'TX', 'MA'
     ax.set_xlabel('State', fontsize=22)
     ax.set_ylabel('Lifecycle cost ($/mile)', fontsize=22)
 
-    ind = np.arange(len(states))  # the x locations for the states
+    ind = np.arange(len(states_ordered))  # the x locations for the states
     width = 0.35  # the width of the bars
 
     # Colors for both EV and diesel bars
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
 
     # EV bars (solid fill)
-    p1 = ax.bar(ind - width/2, rates_to_plot_ev_df['Total capital ($/mi)'], width, color=colors[0], label='Capital')
-    p2 = ax.bar(ind - width/2, rates_to_plot_ev_df['Total labor ($/mi)'], width,
-                bottom=rates_to_plot_ev_df['Total capital ($/mi)'], color=colors[1], label='Labor')
-    p3 = ax.bar(ind - width/2, rates_to_plot_ev_df['Other OPEXs ($/mi)'], width,
-                bottom=rates_to_plot_ev_df['Total capital ($/mi)'] + rates_to_plot_ev_df['Total labor ($/mi)'],
-                color=colors[2], label='Other OPEX')
-    p4 = ax.bar(ind - width/2, rates_to_plot_ev_df['Total electricity or fuel ($/mi)'], width,
-                bottom=rates_to_plot_ev_df['Total capital ($/mi)'] + rates_to_plot_ev_df['Total labor ($/mi)'] +
-                       rates_to_plot_ev_df['Other OPEXs ($/mi)'], color=colors[3], label='Electricity')
+    p1 = ax.bar(ind - width/2, rates_to_plot_ev_df['Total labor ($/mi)'], width, color=colors[1], label='Labor')
+    p2 = ax.bar(ind - width/2, rates_to_plot_ev_df['Other OPEXs ($/mi)'], width,
+                bottom=rates_to_plot_ev_df['Total labor ($/mi)'], color=colors[2], label='Other OPEX')
+    p3 = ax.bar(ind - width/2, rates_to_plot_ev_df['Total electricity or fuel ($/mi)'], width,
+                bottom=rates_to_plot_ev_df['Total labor ($/mi)'] + rates_to_plot_ev_df['Other OPEXs ($/mi)'],
+                color=colors[3], label='Electricity')
+    p4 = ax.bar(ind - width/2, rates_to_plot_ev_df['Total capital ($/mi)'], width,
+                bottom=rates_to_plot_ev_df['Total labor ($/mi)'] + rates_to_plot_ev_df['Other OPEXs ($/mi)'] +
+                       rates_to_plot_ev_df['Total electricity or fuel ($/mi)'], color=colors[0], label='Capital')
 
     # Diesel bars (x fill)
-    p5 = ax.bar(ind + width/2, rates_to_plot_diesel_df['Total capital ($/mi)'], width, color=colors[0], hatch='xx')
-    p6 = ax.bar(ind + width/2, rates_to_plot_diesel_df['Total labor ($/mi)'], width,
-                bottom=rates_to_plot_diesel_df['Total capital ($/mi)'], color=colors[1], hatch='xx')
-    p7 = ax.bar(ind + width/2, rates_to_plot_diesel_df['Other OPEXs ($/mi)'], width,
-                bottom=rates_to_plot_diesel_df['Total capital ($/mi)'] + rates_to_plot_diesel_df['Total labor ($/mi)'],
-                color=colors[2], hatch='xx')
-    p8 = ax.bar(ind + width/2, rates_to_plot_diesel_df['Total electricity or fuel ($/mi)'], width,
-                bottom=rates_to_plot_diesel_df['Total capital ($/mi)'] + rates_to_plot_diesel_df['Total labor ($/mi)'] +
-                       rates_to_plot_diesel_df['Other OPEXs ($/mi)'], color=colors[3], hatch='xx')
+    p5 = ax.bar(ind + width/2, rates_to_plot_diesel_df['Total labor ($/mi)'], width, color=colors[1], hatch='xx')
+    p6 = ax.bar(ind + width/2, rates_to_plot_diesel_df['Other OPEXs ($/mi)'], width,
+                bottom=rates_to_plot_diesel_df['Total labor ($/mi)'], color=colors[2], hatch='xx')
+    p7 = ax.bar(ind + width/2, rates_to_plot_diesel_df['Total electricity or fuel ($/mi)'], width,
+                bottom=rates_to_plot_diesel_df['Total labor ($/mi)'] + rates_to_plot_diesel_df['Other OPEXs ($/mi)'],
+                color=colors[3], hatch='xx')
+    p8 = ax.bar(ind + width/2, rates_to_plot_diesel_df['Total capital ($/mi)'], width,
+                bottom=rates_to_plot_diesel_df['Total labor ($/mi)'] + rates_to_plot_diesel_df['Other OPEXs ($/mi)'] +
+                       rates_to_plot_diesel_df['Total electricity or fuel ($/mi)'], color=colors[0], hatch='xx')
+
 
     ax.set_xticks(ind)
-    ax.set_xticklabels(states)
+    ax.set_xticklabels(states_ordered)
 
     # Adjust the y range to make space for the legend
     ymin, ymax = ax.get_ylim()
@@ -290,7 +293,8 @@ def make_costs_per_mi_geo(average_payload, average_VMT, max_charging_power, elec
                 cost_per_mi_feature['properties']['perc_lab'] = None
                 cost_per_mi_feature['properties']['perc_op'] = None
             else:
-                costs_per_mile = get_costs_per_mile(electricity_rate_feature['properties']['Cents_kWh'], demand_charge_feature['properties']['Average Ma'], average_payload, average_VMT, max_charging_power)
+                #costs_per_mile = get_costs_per_mile(electricity_rate_feature['properties']['Cents_kWh'], demand_charge_feature['properties']['Average Ma'], average_payload, average_VMT, max_charging_power)
+                costs_per_mile = get_costs_per_mile(8.5, demand_charge_feature['properties']['Average Ma'], average_payload, average_VMT, max_charging_power)
                 costs_per_mile_diesel = get_costs_per_mile_diesel(diesel_price_feature['properties']['dies_price'], average_payload, average_VMT)
                 cost_per_mi_feature['properties']['$_mi_tot'] = costs_per_mile['TCO ($/mi)']
                 cost_per_mi_feature['properties']['$_mi_cap'] = costs_per_mile['Total capital ($/mi)']
@@ -341,11 +345,12 @@ def main():
     
     ############################# Make validation plots #############################
     average_payload_default = 40000
-    average_VMT_default = 100000
-    max_charging_power_default = 400
+    average_VMT_default = 190000
+    max_charging_power_default = 200
     make_costs_per_mi_geo(average_payload_default, average_VMT_default, max_charging_power_default, electricity_rates_geojson, demand_charges_geojson, diesel_prices_geojson, plot_validation=True)
     make_emissions_per_mi_geo(average_payload_default, average_VMT_default, grid_intensity_geojson_state, filename_prefix='state_', plot_validation=True)
     #################################################################################
+    
     
     average_payloads = [0, 10000, 20000, 30000, 40000, 50000]
     average_VMTs = [40000, 70000, 100000, 130000, 160000, 190000]
@@ -393,7 +398,7 @@ def main():
                 # Process result if needed
             except Exception as exc:
                 print(f'Generated an exception: {exc} for payload: {average_payload}, VMT: {average_VMT}, max charging power: {max_charging_power}')
-
+    
 if __name__ == '__main__':
     main()
 
