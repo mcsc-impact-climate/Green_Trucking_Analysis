@@ -91,7 +91,7 @@ Inputs:
     - identifier_str (string): If not None, adds a string identifier to the name of the saved plot
 """
 def plot_electricity_cost_by_year(electricity_cost_df, identifier_str=None):
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(8, 6))
     ax.tick_params(axis='both', which='major', labelsize=15)
     ax.set_xlabel('Year', fontsize=18)
     ax.set_ylabel('Electricity unit cost ($/kWh)', fontsize=18)
@@ -107,15 +107,15 @@ def plot_electricity_cost_by_year(electricity_cost_df, identifier_str=None):
     
     ax.set_xticks(ind)
     ymin, ymax = ax.get_ylim()
-    ax.set_ylim(ymin, ymax*1.2)
+    ax.set_ylim(ymin, ymax*1.4)
     ax.legend(fontsize=16)
     plt.tight_layout()
     if identifier_str:
         plt.savefig(f'plots/electricity_unit_price_{identifier_str}.png')
         plt.savefig(f'plots/electricity_unit_price_{identifier_str}.pdf')
     else:
-        plt.savefig('plots/electricity_unit_price.png')
-        plt.savefig('plots/electricity_unit_price.pdf')
+        plt.savefig('plots/electricity_unit_price.png', dpi=300)
+        plt.savefig('plots/electricity_unit_price.pdf', dpi=300)
 
 def main():
     # Set default values for variable parameters
@@ -147,17 +147,27 @@ def main():
     ######################################################################
     """
     
-    """
-    # Test obtaining and plotting the electricity unit cost for California electricity rates
-    demand_charge_CA = 13.4       # $/kW
-    electricity_rate_CA = 0.1918   # $/kWh
+    
+#    # Test obtaining and plotting the electricity unit cost for California electricity rates
+#    demand_charge_CA = 13.4       # $/kW
+#    electricity_rate_CA = 0.1918   # $/kWh
+#    m_payload_lb = 40000                        # lb
+#    average_VMT = 100000                         # miles/year
+#    charging_power = 400                        # Max charging power, in kW
+#    parameters, vehicle_model_results_dict = costing_and_emissions_tools.get_vehicle_model_results(m_payload_lb, average_VMT)
+#    electricity_cost_df = costing_and_emissions_tools.get_electricity_cost_by_year(parameters, vehicle_model_results_dict['Fuel economy (kWh/mi)'], demand_charge_CA, electricity_rate_CA, charging_power)
+#    plot_electricity_cost_by_year(electricity_cost_df, 'CA')
+    
+    # Test obtaining and plotting the electricity unit cost for Illinois electricity rates
+    demand_charge_IL = 3.15526004875406       # $/kW
+    electricity_rate_IL = 0.085   # $/kWh
     m_payload_lb = 40000                        # lb
-    average_VMT = 100000                         # miles/year
-    charging_power = 400                        # Max charging power, in kW
+    average_VMT = 190000                         # miles/year
+    charging_power = 200                        # Max charging power, in kW
     parameters, vehicle_model_results_dict = costing_and_emissions_tools.get_vehicle_model_results(m_payload_lb, average_VMT)
-    electricity_cost_df = costing_and_emissions_tools.get_electricity_cost_by_year(parameters, vehicle_model_results_dict['Fuel economy (kWh/mi)'], demand_charge_CA, electricity_rate_CA, charging_power)
-    plot_electricity_cost_by_year(electricity_cost_df, 'CA')
-    """
+    electricity_cost_df = costing_and_emissions_tools.get_electricity_cost_by_year(parameters, vehicle_model_results_dict['Fuel economy (kWh/mi)'], demand_charge_IL, electricity_rate_IL, charging_power)
+    plot_electricity_cost_by_year(electricity_cost_df, 'IL')
+    
     
     """
     # Plot the number of battery replacements as a function of VMT for a truck carrying a payload of 50,000 lb
