@@ -12,9 +12,7 @@ from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
 import truck_model_tools
 from scipy.interpolate import interp1d
 from scipy.optimize import root_scalar
-import pickle
 import concurrent.futures
-from datetime import datetime
 
 new_rc_params = {'text.usetex': False,
 "svg.fonttype": 'none'
@@ -228,7 +226,6 @@ def main():
         drivecycle_events_list = drivecycles[truck_name]
         for driving_event in drivecycle_events_list:
     
-            startTime = datetime.now()
             print(f'Processing {truck_name} event {driving_event}')
             
             combined_effs = np.linspace(0.829, 1., 10)
@@ -246,10 +243,6 @@ def main():
             filename = f'tables/fitted_gvws_{truck_name}_{driving_event}_vs_combined_eff.csv'
             
             evaluated_gvws_df.to_csv(filename, index=False)
-            
-            run_time = datetime.now() - startTime
-            run_time = run_time.total_seconds()
-            print(f'Processing time for event: {run_time}s')
         
 if __name__ == '__main__':
     main()

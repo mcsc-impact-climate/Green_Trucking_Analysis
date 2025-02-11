@@ -12,7 +12,6 @@ from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
 import truck_model_tools
 from scipy.interpolate import interp1d
 from scipy.optimize import root_scalar
-import pickle
 
 new_rc_params = {'text.usetex': False,
 "svg.fonttype": 'none'
@@ -232,15 +231,15 @@ for truck_name in drivecycles:
         evaluated_gvws[truck_name].append(gvw_payload_average)
 
 # Save the evaluated GVWs as a pickle file
-with open('pickle/fitted_gvws.pkl', 'wb') as f:
-    pickle.dump(evaluated_gvws, f)
+#with open('pickle/fitted_gvws.pkl', 'wb') as f:
+#    pickle.dump(evaluated_gvws, f)
 
 ###########################################################################################################
 
 
 ######################### Analyze the distribution of GVWs evaluated by the model #########################
-with open('pickle/fitted_gvws.pkl', 'rb') as f:
-    evaluated_gvws = pickle.load(f)
+#with open('pickle/fitted_gvws.pkl', 'rb') as f:
+#    evaluated_gvws = pickle.load(f)
 
 all_evaluated_gvws = np.zeros(0)
 data_boxplot = []
@@ -322,15 +321,15 @@ for power in motor_powers:
     # Document the evaluated GVW
     evaluated_gvws_df = pd.concat([evaluated_gvws_df, pd.DataFrame({'Max Motor Power (W)': [power], 'Max GVW (lb)': [gvw_payload_average]})], ignore_index=True)
         
-# Save the evaluated GVWs as a pickle file
-with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_motor_power.pkl', 'wb') as f:
-    pickle.dump(evaluated_gvws_df, f)
+## Save the evaluated GVWs as a pickle file
+#with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_motor_power.pkl', 'wb') as f:
+#    pickle.dump(evaluated_gvws_df, f)
 ###################################################################
 
 
 ############ Plot best-fitting GVW vs. max motor power ############
-with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_motor_power.pkl', 'rb') as f:
-    evaluated_gvws_df = pickle.load(f)
+#with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_motor_power.pkl', 'rb') as f:
+#    evaluated_gvws_df = pickle.load(f)
 
 fig, ax = plt.subplots(figsize=(8, 5))
 ax.set_title(f'{name_title} Event {driving_event}', fontsize=20)
@@ -377,14 +376,14 @@ for combined_eff in combined_effs:
     evaluated_gvws_df = pd.concat([evaluated_gvws_df, pd.DataFrame({'Combined efficiency': [combined_eff], 'Max GVW (lb)': [gvw_payload_average]})], ignore_index=True)
         
 # Save the evaluated GVWs as a pickle file
-with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_combined_eff.pkl', 'wb') as f:
-    pickle.dump(evaluated_gvws_df, f)
+#with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_combined_eff.pkl', 'wb') as f:
+#    pickle.dump(evaluated_gvws_df, f)
 ###################################################################
 
 
 ############ Plot best-fitting GVW vs. combined efficiency ############
-with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_combined_eff.pkl', 'rb') as f:
-    evaluated_gvws_df = pickle.load(f)
+#with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_combined_eff.pkl', 'rb') as f:
+#    evaluated_gvws_df = pickle.load(f)
 
 fig, ax = plt.subplots(figsize=(8, 5))
 ax.set_title(f'{name_title} Event {driving_event}', fontsize=20)
@@ -432,14 +431,14 @@ for e_density_battery in battery_energy_densities:
     evaluated_gvws_df = pd.concat([evaluated_gvws_df, pd.DataFrame({'Battery Energy Density (kWh/ton)': [e_density_battery], 'Max GVW (lb)': [gvw_payload_average]})], ignore_index=True)
         
 # Save the evaluated GVWs as a pickle file
-with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_battery_energy_density.pkl', 'wb') as f:
-    pickle.dump(evaluated_gvws_df, f)
+#with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_battery_energy_density.pkl', 'wb') as f:
+#    pickle.dump(evaluated_gvws_df, f)
 ###################################################################
 
 
 ############ Plot best-fitting GVW vs. combined efficiency ############
-with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_battery_energy_density.pkl', 'rb') as f:
-    evaluated_gvws_df = pickle.load(f)
+#with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_battery_energy_density.pkl', 'rb') as f:
+#    evaluated_gvws_df = pickle.load(f)
 
 fig, ax = plt.subplots(figsize=(8, 5))
 ax.set_title(f'{name_title} Event {driving_event}', fontsize=20)
@@ -488,14 +487,14 @@ for roundtrip_efficiency in battery_roundtrip_efficiencies:
     evaluated_gvws_df = pd.concat([evaluated_gvws_df, pd.DataFrame({'Battery Roundtrip Efficiency': [roundtrip_efficiency], 'Max GVW (lb)': [gvw_payload_average]})], ignore_index=True)
         
 # Save the evaluated GVWs as a pickle file
-with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_battery_roundtrip_efficiency.pkl', 'wb') as f:
-    pickle.dump(evaluated_gvws_df, f)
+#with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_battery_roundtrip_efficiency.pkl', 'wb') as f:
+#    pickle.dump(evaluated_gvws_df, f)
 ###################################################################
 
 
 ############ Plot best-fitting GVW vs. combined efficiency ############
-with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_battery_roundtrip_efficiency.pkl', 'rb') as f:
-    evaluated_gvws_df = pickle.load(f)
+#with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_battery_roundtrip_efficiency.pkl', 'rb') as f:
+#    evaluated_gvws_df = pickle.load(f)
 fig, ax = plt.subplots(figsize=(8, 5))
 ax.set_title(f'{name_title} Event {driving_event}', fontsize=20)
 ax.set_ylabel('GVW best matching NACFE Results (lbs)', fontsize=15)
@@ -544,14 +543,14 @@ for resistance_coef in resistance_coefs:
     evaluated_gvws_df = pd.concat([evaluated_gvws_df, pd.DataFrame({'Resistance Coefficient': [resistance_coef], 'Max GVW (lb)': [gvw_payload_average]})], ignore_index=True)
         
 # Save the evaluated GVWs as a pickle file
-with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_resistance_coef.pkl', 'wb') as f:
-    pickle.dump(evaluated_gvws_df, f)
+#with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_resistance_coef.pkl', 'wb') as f:
+#    pickle.dump(evaluated_gvws_df, f)
 ###################################################################
 
 
 ############ Plot best-fitting GVW vs. combined efficiency ############
-with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_resistance_coef.pkl', 'rb') as f:
-    evaluated_gvws_df = pickle.load(f)
+#with open(f'pickle/fitted_gvws_{truck_name}_{driving_event}_vs_resistance_coef.pkl', 'rb') as f:
+#    evaluated_gvws_df = pickle.load(f)
 fig, ax = plt.subplots(figsize=(9, 5))
 ax.set_title(f'{name_title} Event {driving_event}', fontsize=20)
 ax.set_ylabel('GVW best matching NACFE Results (lbs)', fontsize=15)
