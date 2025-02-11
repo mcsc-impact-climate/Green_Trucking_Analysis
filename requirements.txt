@@ -2,6 +2,3 @@ numpy
 pandas
 matplotlib
 scipy
-datetime
-futures
-shapely

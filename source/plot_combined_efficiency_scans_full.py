@@ -10,8 +10,6 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
 from scipy.interpolate import interp1d
 from scipy.optimize import root_scalar
-import pickle
-from datetime import datetime
 
 ###################################### Select drivecycles to consider #####################################
 drivecycles = {
