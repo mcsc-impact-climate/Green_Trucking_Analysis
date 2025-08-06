@@ -88,11 +88,8 @@ Using the Tesla Semi parameters established from the above analysis, the scripts
 To run:
 
 ```bash
-# Evaluate the best-fitting payload for each EV drivecycle
-python source/evaluate_payload_vs_mileage.py
-
-# Evaluate coefficients for the approximate linear relationship between payload and fuel economy (gal/mile) if the drivecycles were performed by a comparable diesel truck
-python source/evaluate_payload_vs_mileage_diesel.py
+# Evaluate the best-fitting payload for each EV and diesel drivecycle
+python source/evaluate_payload_vs_energy_economy.py
 
 # Evaluate the best fit relationships for fuel economy vs. payload
 python source/make_payload_vs_mileage_function.py
