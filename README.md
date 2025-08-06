@@ -83,7 +83,7 @@ The resulting plot can be found in `plots/gvw_dist_vs_combined_eff.png`.
 
 ## Evaluate straight line approximation of fuel economy as a function of payload
 
-Using the Tesla Semi parameters established from the above analysis, the scripts [`evaluate_payload_vs_mileage.py`](source/evaluate_payload_vs_mileage.py) and [`make_payload_vs_mileage_function.py`](source/make_payload_vs_mileage_function.py) use the Green group's model to evaluate the best-fitting payload for each EV drivecycle, then perform a linear fit of fuel economy vs. payload to approximate a linear functional relationship between these two parameters. The code takes ~1 minute to run.
+Using the Tesla Semi parameters established from the above analysis, the scripts [`evaluate_payload_vs_energy_economy.py`](source/evaluate_payload_vs_energy_economy.py) and [`make_payload_vs_energy_economy_functions.py`](source/make_payload_vs_energy_economy_functions.py) use the Green group's model to evaluate the best-fitting payload for each EV drivecycle, then perform a linear fit of fuel economy vs. payload to approximate a linear functional relationship between these two parameters. The code takes ~1 minute to run.
 
 To run:
 
@@ -92,8 +92,7 @@ To run:
 python source/evaluate_payload_vs_energy_economy.py
 
 # Evaluate the best fit relationships for fuel economy vs. payload
-python source/make_payload_vs_mileage_function.py
-python source/make_payload_vs_mileage_function_diesel.py
+python source/make_payload_vs_energy_economy_functions.py
 ```
 
 This will produce visualizations of the fits in `plots/payload_vs_mileage_function.png` and `plots/payload_vs_mileage_function_diesel.png`, along with csv files containing the best-fit linear parameters in `tables/payload_vs_mileage_best_fit_params.csv'` and `tables/payload_vs_mileage_linear_coefs_diesel.csv`.
