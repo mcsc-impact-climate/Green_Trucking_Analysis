@@ -14,7 +14,7 @@ class cost:
   def __init__(self, parameters):
     self.parameters = parameters
 
-  def get_capital(self, vehicle_model_results, replacements, capital_cost_unit, battery_unit_cost, discountfactor, vehicle_purchase_price=False):
+  def get_capital(self, vehicle_model_results, replacements, capital_cost_unit, battery_unit_cost, discountfactor, vehicle_purchase_price=False, e_bat=825):
     # DMM: Costs are all per unit power rating, but if you find absolute cost that's fine too
     # DMM: The motor and inverter cost might be underestimated for Tesla Semi because there are actually 3 smaller motors rather than 1 large motor
     if vehicle_purchase_price:
@@ -25,7 +25,7 @@ class cost:
               (capital_cost_unit['DC-DC converter ($/kW)'] * self.parameters.p_aux / 1000.)
     
     # Cost to replace the battery
-    battery_cost = (1 + replacements * discountfactor[5]) * battery_unit_cost * vehicle_model_results['Battery capacity (kWh)']
+    battery_cost = (1 + replacements * discountfactor[5]) * battery_unit_cost * e_bat
     capital = capital + battery_cost
     
     total_CAPEX = vehicle_model_results['Payload penalty factor'] * capital / self.parameters.VMT['VMT (miles)'].sum()
@@ -53,11 +53,11 @@ class cost:
     total_OPEX = electricity + labor + others_opex
     return total_OPEX, electricity, labor, others_opex  #in $ per mile
 
-  def get_TCO(self, vehicle_model_results, capital_cost_unit, battery_unit_cost, operating_cost_unit, electricity_unit_by_year, replacements, vehicle_purchase_price = None):
+  def get_TCO(self, vehicle_model_results, capital_cost_unit, battery_unit_cost, operating_cost_unit, electricity_unit_by_year, replacements, vehicle_purchase_price = None, e_bat=825):
     costs_total = {} #'Total capital ($/mi)', 'Total operating ($/mi)', 'Total electricity ($/mi)', 'Total labor ($/mi)', 'Other OPEXs ($/mi)', 'GHGs emissions penalty ($/mi)', 'TCS ($/mi)'
 
     discountfactor = 1 / np.power(1 + self.parameters.discountrate, np.arange(10)) #life time of trucks is 10 years
-    costs_total['Total capital ($/mi)'] = cost(self.parameters).get_capital(vehicle_model_results, replacements, capital_cost_unit, battery_unit_cost, discountfactor, vehicle_purchase_price)
+    costs_total['Total capital ($/mi)'] = cost(self.parameters).get_capital(vehicle_model_results, replacements, capital_cost_unit, battery_unit_cost, discountfactor, vehicle_purchase_price, e_bat=e_bat)
     
     costs_total['Total operating ($/mi)'], costs_total['Total electricity ($/mi)'], costs_total['Total labor ($/mi)'], costs_total['Other OPEXs ($/mi)'] = cost(self.parameters).get_operating(vehicle_model_results, operating_cost_unit, electricity_unit_by_year, costs_total['Total capital ($/mi)'], discountfactor)
     

@@ -6,7 +6,7 @@ Purpose: Evaluate lifecycle costs and emissions as a function of:
     - demand charge
     - grid emission intensity
     - VMT
-This code was originally written by Kariana Moreno Sader and Sayandeep Biswas, with modifications by Danika MacDonell
+This code was originally written by Kariana Moreno Sader and Sayandeep Biswas, with modifications by Danika Eamer
 """
 
 # Import packages
@@ -23,6 +23,50 @@ from datetime import datetime
 MONTHS_PER_YEAR = 12
 KG_PER_TON = 1000
 KG_PER_LB = 0.453592
+
+"""
+Function: Calculate the battery mass associated with a given truck design range
+Inputs:
+    - range: Design range (miles)
+    - payload: Payload carried by the truck (lb)
+    - f_linear_params (string): Path to a csv file containing the best-fit linear fit slope and y-intersect (along with uncertainties) for mileage vs. payload
+    - f_bat_cap (string): Path to a csv file containing best-fit battery capacity of each Tesla Semi in the 2023 PepsiCo pilot
+    - battery_chemistry (string): Battery chemistry (either NMC or LFP)
+"""
+def get_ebat_from_range(range, payload, f_linear_params='tables/payload_vs_mileage_best_fit_params.csv', f_bat_cap='data/pepsi_semi_battery_capacities.csv', battery_chemistry='NMC'):
+
+    # Get linear parameters
+    payload_vs_mileage_params_df = pd.read_csv(f_linear_params)
+    slope = payload_vs_mileage_params_df['slope (kWh/lb-mi)'].iloc[0]
+    slope_unc = payload_vs_mileage_params_df['slope unc (kWh/lb-mi)'].iloc[0]
+    b = payload_vs_mileage_params_df['b (kWh/mi)'].iloc[0]
+    b_unc = payload_vs_mileage_params_df['b unc (kWh/mi)'].iloc[0]
+    
+    # Get the battery energy density (kWh/ton)
+    battery_params_dict = data_collection_tools.read_battery_params(chemistry=battery_chemistry)
+    e_density = battery_params_dict['Energy density (kWh/ton)']
+    
+    # Convert battery energy density from kWh/ton to kWh/lb
+    e_density = e_density * KG_PER_LB / KG_PER_TON
+    
+    # Get the nominal battery mass that was used to calculate the linear slope for mileage vs. payload
+    bat_cap_df = pd.read_csv(f_bat_cap, index_col='Value')
+    bat_cap_av = bat_cap_df['average']['Mean']
+    m_bat_nom_lb = bat_cap_av / e_density
+    
+#    print("Nominal battery mass (lb): ", m_bat_nom_lb)
+#    print("Nominal range (miles): ", m_bat_nom_lb * e_density / (slope*payload+b))
+    
+    # Calculate the battery mass (from re-arranging range * [slope*(payload + m_bat - m_bat_nom)]
+    m_bat_lb = (payload + (b/slope) - m_bat_nom_lb) / (e_density / (range * slope) - 1)
+    
+    #print("Modified battery mass (lb): ", m_bat_lb)
+
+    # Calculate the battery capacity
+    e_bat = m_bat_lb * e_density
+    #print("Modified battery capacity (kWh): ", e_bat)
+    
+    return e_bat
 
 """
 Function: Calculate the monthly charging energy requirements given a truck's annual miles traveled (VMT) and fuel economy
@@ -116,15 +160,29 @@ Inputs:
     - payload (float): Typical payload that the truck carries, in lb
     - f_linear_params (string): Path to a csv file containing the best-fit linear fit slope and y-intersect (along with uncertainties) for mileage vs. payload
 """
-def get_mileage(m_payload, f_linear_params = 'tables/payload_vs_mileage_best_fit_params.csv'):
+def get_mileage(m_payload, e_bat, battery_chemistry='NMC', f_linear_params = 'tables/payload_vs_mileage_best_fit_params.csv'):
     payload_vs_mileage_params_df = pd.read_csv(f_linear_params)
     slope = payload_vs_mileage_params_df['slope (kWh/lb-mi)'].iloc[0]
     slope_unc = payload_vs_mileage_params_df['slope unc (kWh/lb-mi)'].iloc[0]
     b = payload_vs_mileage_params_df['b (kWh/mi)'].iloc[0]
     b_unc = payload_vs_mileage_params_df['b unc (kWh/mi)'].iloc[0]
     
-    mileage = slope * m_payload + b
-    mileage_unc = slope_unc * m_payload + b_unc
+    battery_params_dict = data_collection_tools.read_battery_params(chemistry=battery_chemistry)
+    e_density = battery_params_dict['Energy density (kWh/ton)']
+    
+    # Convert battery energy density from kWh/ton to kWh/lb
+    e_density = e_density * KG_PER_LB / KG_PER_TON
+    
+    # Calculate the battery mass, in lb
+    m_bat = e_bat / e_density
+    
+    # Calculate the nominal battery mass, in lb
+    battery_capacity_info = pd.read_csv('data/pepsi_semi_battery_capacities.csv', index_col='Value')
+    e_bat_nom = battery_capacity_info['average']['Mean']
+    m_bat_nom = e_bat_nom / e_density
+    
+    mileage = slope * (m_payload + m_bat - m_bat_nom) + b
+    mileage_unc = slope_unc * (m_payload + m_bat - m_bat_nom) + b_unc
     
     return mileage, mileage_unc
     
@@ -208,15 +266,15 @@ def get_vehicle_model_results(m_payload_lb, average_VMT, truck_type='semi', batt
     parameters = data_collection_tools.read_parameters(truck_params = truck_type, vmt_params = 'daycab_vmt_vius_2021')
     
     parameters.VMT['VMT (miles)'] = get_VMT_distribution(parameters.VMT['VMT (miles)'], average_VMT)
-    
-    # Read in battery info data
-    battery_info_df = pd.read_csv('data/default_battery_params.csv', index_col=0)
 
     # Get the mileage and uncertainty for the given payload
-    mileage, mileage_unc = get_mileage(m_payload_lb, f_linear_params = 'tables/payload_vs_mileage_best_fit_params.csv')
+    #print(e_bat)
+    mileage, mileage_unc = get_mileage(m_payload_lb, e_bat, f_linear_params = 'tables/payload_vs_mileage_best_fit_params.csv')
+    #print("Mileage (kWh/mi): ", mileage)
     
     # Calculate the masses of the battery and truck, given the input battery capacity and energy density
-    e_density = battery_info_df['Value'].loc[f'{battery_chemistry} battery energy density']   # kWh/ton
+    battery_params_dict = data_collection_tools.read_battery_params(chemistry=battery_chemistry)
+    e_density = battery_params_dict['Energy density (kWh/ton)']
     m_truck_max_kg = m_truck_max_lb * KG_PER_LB
     m_bat_kg = e_bat / e_density * KG_PER_TON          # Battery mass, in kg
     m_bat_lb = m_bat_kg / KG_PER_LB
@@ -279,18 +337,16 @@ Inputs:
 def evaluate_emissions(m_payload_lb, grid_emission_intensity, average_VMT=85000, grid_emission_intensity_year=2022, truck_simulation_start_year=2024, e_bat=825, battery_chemistry='NMC', m_truck_max_lb=82000):
     
     # Evaluate parameters and vehicle model results for the given payload
-    parameters, vehicle_model_results_dict = get_vehicle_model_results(m_payload_lb, average_VMT)
-    
-    calculate_replacements(parameters.VMT['VMT (miles)'], vehicle_model_results_dict['Fuel economy (kWh/mi)'], e_bat=825, max_battery_cycles=1000)
-    
+    parameters, vehicle_model_results_dict = get_vehicle_model_results(m_payload_lb, average_VMT, e_bat=e_bat)
+        
     # Read in battery parameters
     battery_params_dict = data_collection_tools.read_battery_params(chemistry=battery_chemistry)
     
     # Calculate the number of battery replacements needed
-    battery_params_dict['Replacements'] = calculate_replacements(parameters.VMT['VMT (miles)'], vehicle_model_results_dict['Fuel economy (kWh/mi)'])
+    battery_params_dict['Replacements'] = calculate_replacements(parameters.VMT['VMT (miles)'], vehicle_model_results_dict['Fuel economy (kWh/mi)'], e_bat=e_bat)
     
     # Calculate GHG emissions per mile
-    GHG_emissions = emissions_tools.emission(parameters).get_WTW(vehicle_model_results_dict, battery_params_dict['Manufacturing emissions (CO2/kWh)'],  battery_params_dict['Replacements'], grid_intensity_start=grid_emission_intensity, grid_intensity_start_year=grid_emission_intensity_year, start_year=truck_simulation_start_year)
+    GHG_emissions = emissions_tools.emission(parameters).get_WTW(vehicle_model_results_dict, battery_params_dict['Manufacturing emissions (CO2/kWh)'],  battery_params_dict['Replacements'], grid_intensity_start=grid_emission_intensity, grid_intensity_start_year=grid_emission_intensity_year, start_year=truck_simulation_start_year, e_bat=e_bat)
     
     return GHG_emissions
 
@@ -326,7 +382,7 @@ Inputs:
 def evaluate_costs(m_payload_lb, electricity_charge, demand_charge, average_VMT=85000, charging_power=750, e_bat=825, battery_chemistry='NMC', m_truck_max_lb=82000, vehicle_purchase_price=None):
     
     # Evaluate parameters and vehicle model results for the given payload
-    parameters, vehicle_model_results_dict = get_vehicle_model_results(m_payload_lb, average_VMT)
+    parameters, vehicle_model_results_dict = get_vehicle_model_results(m_payload_lb, average_VMT, e_bat=e_bat)
     
     # Read in costing data for the EV truck
     truck_cost_data = data_collection_tools.read_truck_cost_data(truck_type='EV')
@@ -335,13 +391,13 @@ def evaluate_costs(m_payload_lb, electricity_charge, demand_charge, average_VMT=
     battery_params_dict = data_collection_tools.read_battery_params(chemistry=battery_chemistry)
     
     # Calculate the number of battery replacements needed
-    battery_params_dict['Replacements'] = calculate_replacements(parameters.VMT['VMT (miles)'], vehicle_model_results_dict['Fuel economy (kWh/mi)'])
+    battery_params_dict['Replacements'] = calculate_replacements(parameters.VMT['VMT (miles)'], vehicle_model_results_dict['Fuel economy (kWh/mi)'], e_bat=e_bat)
     
     # Calculate the electricity price breakdown for each year
     electricity_cost_df = get_electricity_cost_by_year(parameters, vehicle_model_results_dict['Fuel economy (kWh/mi)'], demand_charge, electricity_charge, charging_power)
 
     # Calculate TCO per mile
-    TCO = costing_tools.cost(parameters).get_TCO(vehicle_model_results_dict, truck_cost_data['Capital Costs'], truck_cost_data['Battery Unit Cost ($/kWh)'], truck_cost_data['Operating Costs'], electricity_cost_df['Total'], battery_params_dict['Replacements'], vehicle_purchase_price = vehicle_purchase_price)
+    TCO = costing_tools.cost(parameters).get_TCO(vehicle_model_results_dict, truck_cost_data['Capital Costs'], truck_cost_data['Battery Unit Cost ($/kWh)'], truck_cost_data['Operating Costs'], electricity_cost_df['Total'], battery_params_dict['Replacements'], vehicle_purchase_price = vehicle_purchase_price, e_bat=e_bat)
     
     return TCO
 
@@ -369,6 +425,7 @@ def evaluate_costs_diesel(m_payload_lb, diesel_price=3.67, average_VMT=85000, m_
     TCO = costing_tools_diesel.cost(parameters).get_TCO(vehicle_model_results_dict, truck_cost_data['Capital Costs'], truck_cost_data['Operating Costs'], diesel_price)
     
     return TCO
+    
 
 
 ######## Basic code to test functions ########
@@ -381,3 +438,8 @@ def evaluate_costs_diesel(m_payload_lb, diesel_price=3.67, average_VMT=85000, m_
 #discountfactor = 1 / np.power(1 + parameters.discountrate, np.arange(10)) #life time of trucks is 10 years
 #total_CAPEX = costing_tools.cost(parameters).get_capital(vehicle_model_results_dict, 0, truck_cost_data['Capital Costs'], truck_cost_data['Battery Unit Cost ($/kWh)'], discountfactor)
 #print(total_CAPEX)
+#e_bat_modified = get_ebat_from_range(100, 30000)
+#print("Lifetime emissions with nominal battery: ", evaluate_emissions(30000, 368, average_VMT=140000))
+#print("Lifetime emissions with modified battery: ", evaluate_emissions(30000, 368, e_bat=e_bat_modified, average_VMT=140000))
+#print("Lifetime costs with nominal battery: ", evaluate_costs(30000, 10, 10, average_VMT=190000))
+#print("Lifetime costs with modified battery: ", evaluate_costs(30000, 10, 10, e_bat=e_bat_modified, average_VMT=190000))

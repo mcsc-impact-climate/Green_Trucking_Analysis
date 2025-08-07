@@ -78,12 +78,12 @@ class emission:
     plt.savefig(f'plots/grid_emission_intensity_projection_{label_save}.png')
     plt.savefig(f'plots/grid_emission_intensity_projection_{label_save}.pdf')
 
-  def get_WTW(self, vehicle_model_results, GHG_bat_unit, replacements, scenario='Present', grid_intensity_start=None, grid_intensity_start_year=None, start_year=None):
+  def get_WTW(self, vehicle_model_results, GHG_bat_unit, replacements, scenario='Present', grid_intensity_start=None, grid_intensity_start_year=None, start_year=None, e_bat=825):
             
     # Emissions are broken down into battery manufacturing and electricity production on the grid
     GHG_emissions = {}
     
-    GHG_emissions['GHGs manufacturing (gCO2/mi)'] = (vehicle_model_results['Payload penalty factor'] * (1 + replacements) * vehicle_model_results['Battery capacity (kWh)'] * GHG_bat_unit) / (self.parameters.VMT['VMT (miles)']).sum()
+    GHG_emissions['GHGs manufacturing (gCO2/mi)'] = (vehicle_model_results['Payload penalty factor'] * (1 + replacements) * e_bat * GHG_bat_unit) / (self.parameters.VMT['VMT (miles)']).sum()
     
     VMT_grid_CI_df = self.get_CI_grid_projection(scenario, grid_intensity_start, grid_intensity_start_year, start_year)
 
