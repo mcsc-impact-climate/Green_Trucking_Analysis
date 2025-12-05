@@ -2,11 +2,11 @@
 
 [![DOI](https://zenodo.org/badge/750992867.svg)](https://zenodo.org/doi/10.5281/zenodo.13205851)
 
-# Calibration and regional analysis of the Green group trucking model
+# Adaptation of the Green group trucking model using NACFE Run On Less data
 
 ## Summary
 
-This code updates the electricity costing and EV truck emissions+TCO analysis developed by Kariana Moreno Sader and Sayandeep Biswas with operating parameters obtained from PepsiCo's Tesla Semi pilot in California using data published [here](https://runonless.com/run-on-less-electric-depot-reports/) by NACFE from their 2023 Run On Less pilot. The code used to obtain the operating parameters for the Tesla semi can be found in [this repo](https://github.com/mcsc-impact-climate/PepsiCo_NACFE_Analysis).
+This code updates the electricity costing and EV truck emissions+TCO analysis developed by Kariana Moreno Sader and Sayandeep Biswas with operating parameters obtained from PepsiCo's Tesla Semi pilot in California using data published [here](https://runonless.com/run-on-less-electric-depot-reports/) by NACFE from their 2023 Run On Less Electric pilot. The code used to obtain the operating parameters for the Tesla semi can be found in [this repo](https://github.com/mcsc-impact-climate/PepsiCo_NACFE_Analysis).
 
 Links to [original colab notebook](https://colab.research.google.com/drive/124rFu_4vHx4cP6SODtdzCxnUmLY50wbW?usp=sharing) developed by Kariana Moreno Sader and Sayandeep Biswas and [associated publication (Moreno Sader et al., 2023)](https://chemrxiv.org/engage/chemrxiv/article-details/656e4691cf8b3c3cd7c96810).
 
