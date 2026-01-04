@@ -438,7 +438,7 @@ def evaluate_costs_diesel(m_payload_lb, diesel_price=3.67, average_VMT=85000, m_
 #discountfactor = 1 / np.power(1 + parameters.discountrate, np.arange(10)) #life time of trucks is 10 years
 #total_CAPEX = costing_tools.cost(parameters).get_capital(vehicle_model_results_dict, 0, truck_cost_data['Capital Costs'], truck_cost_data['Battery Unit Cost ($/kWh)'], discountfactor)
 #print(total_CAPEX)
-#e_bat_modified = get_ebat_from_range(100, 30000)
+e_bat_modified = get_ebat_from_range(100, 30000)
 #print("Lifetime emissions with nominal battery: ", evaluate_emissions(30000, 368, average_VMT=140000))
 #print("Lifetime emissions with modified battery: ", evaluate_emissions(30000, 368, e_bat=e_bat_modified, average_VMT=140000))
 #print("Lifetime costs with nominal battery: ", evaluate_costs(30000, 10, 10, average_VMT=190000))

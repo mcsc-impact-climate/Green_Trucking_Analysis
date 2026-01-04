@@ -95,7 +95,8 @@ Inputs:
     - average_VMT (float): Average annual miles traveled over the truck's lifetime
 """
 def make_emissions_per_mi_geo(average_payload, average_VMT, average_range, grid_intensity_geojson, filename_prefix='', plot_validation=False):
-    for feature in grid_intensity_geojson['features']:
+    emissions_per_mi_geojson = copy.deepcopy(grid_intensity_geojson)
+    for feature in emissions_per_mi_geojson['features']:
         # Check if the 'CO2_rate' field exists in the properties
         if 'CO2_rate' in feature['properties'] and not (feature['properties']['CO2_rate'] is None):
             gCO2e_per_mi_df = get_gCO2e_per_mile(feature['properties']['CO2_rate'], average_payload, average_VMT, average_range)
@@ -105,11 +106,11 @@ def make_emissions_per_mi_geo(average_payload, average_VMT, average_range, grid_
             del feature['properties']['CO2_rate']
 
     with open(f'geojsons/emissions_per_mile/{filename_prefix}emissions_per_mile_payload{average_payload}_avVMT{average_VMT}_avRange{average_range}.geojson', mode='w') as emissions_geojson:
-        json.dump(grid_intensity_geojson, emissions_geojson, indent=4)
+        json.dump(emissions_per_mi_geojson, emissions_geojson, indent=4)
         
     # Plot emissions/mile breakdown for a few sample balancing authorities
     if plot_validation:
-        plot_emissions_per_mile_breakdown(grid_intensity_geojson)
+        plot_emissions_per_mile_breakdown(emissions_per_mi_geojson)
 
 #################################################################################
 
@@ -331,7 +332,7 @@ def make_costs_per_mi_geo(average_payload, average_VMT, max_charging_power, aver
     
 def parallel_make_emissions(average_payload, average_VMT, average_range, grid_intensity_geojson_ba, grid_intensity_geojson_state):
     # Function to execute both tasks sequentially for a given set of arguments
-    make_emissions_per_mi_geo(average_payload, average_VMT, average_range, grid_intensity_geojson_ba, 'ba_')
+    #make_emissions_per_mi_geo(average_payload, average_VMT, average_range, grid_intensity_geojson_ba, 'ba_')
     make_emissions_per_mi_geo(average_payload, average_VMT, average_range, grid_intensity_geojson_state, 'state_')
 
 def parallel_make_costs(average_payload, average_VMT, max_charging_power, average_range, electricity_rates_geojson, demand_charges_geojson, diesel_prices_geojson):
@@ -351,8 +352,8 @@ def main():
     average_range_default = 400
     max_charging_power_default = 200
     
-    make_costs_per_mi_geo(average_payload_default, average_VMT_default, max_charging_power_default, average_range_default, electricity_rates_geojson, demand_charges_geojson, diesel_prices_geojson, plot_validation=True)
-    make_emissions_per_mi_geo(average_payload_default, average_VMT_default, average_range_default, grid_intensity_geojson_state, filename_prefix='state_', plot_validation=True)
+    make_costs_per_mi_geo(average_payload_default, average_VMT_default, max_charging_power_default, average_range_default, electricity_rates_geojson, demand_charges_geojson, diesel_prices_geojson, plot_validation=False)
+    make_emissions_per_mi_geo(average_payload_default, average_VMT_default, average_range_default, grid_intensity_geojson_state, filename_prefix='state_', plot_validation=False)
     #################################################################################
     
     average_ranges = [100, 200, 300, 400, 500]
@@ -386,24 +387,24 @@ def main():
                     print(f'Generated an exception: {exc} for payload: {average_payload}, VMT: {average_VMT}, range: {average_range}')
         
         
-        # Evaluate EV trucking costs in parallel
-        for average_range in average_ranges:
-            for average_payload in average_payloads:
-                for average_VMT in average_VMTs:
-                    for max_charging_power in max_charging_powers:
-                        # Submit each combination of tasks to be executed in parallel
-                        future_costs = executor.submit(parallel_make_costs, average_payload, average_VMT, max_charging_power, average_range, electricity_rates_geojson, demand_charges_geojson, diesel_prices_geojson)
-                        futures_costs[future_costs] = (average_payload, average_VMT, max_charging_power, average_range)
-                
-        # Wait for the costs futures to complete and handle them if necessary
-        for future_costs in as_completed(futures_costs):
-            # You can add error handling or results processing here
-            average_payload, average_VMT, max_charging_power, average_range = futures_costs[future_costs]
-            try:
-                result = future_costs.result()
-                # Process result if needed
-            except Exception as exc:
-                print(f'Generated an exception: {exc} for payload: {average_payload}, VMT: {average_VMT}, max charging power: {max_charging_power}, range: {average_range}')
+#        # Evaluate EV trucking costs in parallel
+#        for average_range in average_ranges:
+#            for average_payload in average_payloads:
+#                for average_VMT in average_VMTs:
+#                    for max_charging_power in max_charging_powers:
+#                        # Submit each combination of tasks to be executed in parallel
+#                        future_costs = executor.submit(parallel_make_costs, average_payload, average_VMT, max_charging_power, average_range, electricity_rates_geojson, demand_charges_geojson, diesel_prices_geojson)
+#                        futures_costs[future_costs] = (average_payload, average_VMT, max_charging_power, average_range)
+#
+#        # Wait for the costs futures to complete and handle them if necessary
+#        for future_costs in as_completed(futures_costs):
+#            # You can add error handling or results processing here
+#            average_payload, average_VMT, max_charging_power, average_range = futures_costs[future_costs]
+#            try:
+#                result = future_costs.result()
+#                # Process result if needed
+#            except Exception as exc:
+#                print(f'Generated an exception: {exc} for payload: {average_payload}, VMT: {average_VMT}, max charging power: {max_charging_power}, range: {average_range}')
     
 if __name__ == '__main__':
     main()
