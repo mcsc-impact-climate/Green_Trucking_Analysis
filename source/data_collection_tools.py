@@ -9,14 +9,18 @@ import truck_model_tools
 import truck_model_tools_diesel
 
 # Function to read in non-battery parameters for the truck model
-def read_parameters(truck_params='default', economy_params='default', vmt_params='default', truck_type='EV'):
-    truck_params_str = f'data/{truck_params}_truck_params.csv'
-    economy_params_str = f'data/{economy_params}_economy_params.csv'
-    vmt_params_str = f'data/{vmt_params}_vmt.csv'
-    if truck_type == 'EV':
-        parameters = truck_model_tools.read_parameters(truck_params_str, economy_params_str, 'data/constants.csv', 'data/default_vmt.csv')
+def read_parameters(truck_params='default', economy_params='default', vmt_params='default', truck_type='EV', run='messy_middle'):
+    if run == 'messy_middle':
+        data_dir = 'data_messy'
     else:
-        parameters = truck_model_tools_diesel.read_parameters(truck_params_str, economy_params_str, 'data/constants.csv', 'data/default_vmt.csv')
+        data_dir = 'data'
+    truck_params_str = f'{data_dir}/{truck_params}_truck_params.csv'
+    economy_params_str = f'{data_dir}/{economy_params}_economy_params.csv'
+    vmt_params_str = f'{data_dir}/{vmt_params}.csv'
+    if truck_type == 'EV':
+        parameters = truck_model_tools.read_parameters(truck_params_str, economy_params_str, f'{data_dir}/constants.csv', vmt_params_str)
+    else:
+        parameters = truck_model_tools_diesel.read_parameters(truck_params_str, economy_params_str, f'{data_dir}/constants.csv', vmt_params_str)
     return parameters
 
 # Function to read in battery parameters for the truck model
