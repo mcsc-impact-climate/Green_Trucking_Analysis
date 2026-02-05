@@ -151,23 +151,32 @@ class ParameterOptimizer:
             
             # Get observed fuel consumption
             if driving_event not in self.summary_df.index:
-                return 1e10  # Large penalty if event not found
+                return 1e10, 0  # Large penalty if event not found
             
             obs_fuel_consumption = self.summary_df.loc[driving_event, "Fuel economy (kWh/mile)"]
             
             # Calculate signed percentage difference (allows +/- to cancel)
             pct_diff = (model_fuel_consumption - obs_fuel_consumption) / obs_fuel_consumption * 100
             
-            return pct_diff
+            # Calculate uncertainty for this event
+            instantaneous_fuel = drivecycle_data['Instantaneous Energy (kWh/mile)'].dropna()
+            if len(instantaneous_fuel) > 1:
+                fuel_sem = instantaneous_fuel.std() / np.sqrt(len(instantaneous_fuel))
+                fuel_unc_pct = (fuel_sem / obs_fuel_consumption * 100) if obs_fuel_consumption > 0 else 0
+            else:
+                fuel_unc_pct = 0
+            
+            return pct_diff, fuel_unc_pct
         
         except Exception as e:
             print(f"Error evaluating event {driving_event}: {e}")
-            return 1e10
+            return 1e10, 0
     
     def objective_function(self, x):
         """
-        Objective function to minimize: mean signed percentage error in fuel economy over all driving events.
+        Objective function to minimize: weighted mean signed percentage error in fuel economy over all driving events.
         Allows +/- errors to cancel, penalizing systematic bias.
+        Weights are inversely proportional to squared uncertainty for each event.
         
         Parameters:
         -----------
@@ -176,8 +185,8 @@ class ParameterOptimizer:
         
         Returns:
         --------
-        abs_mean_signed_pct_error : float
-            Absolute value of mean signed percentage error over all driving events
+        abs_weighted_mean_signed_pct_error : float
+            Absolute value of weighted mean signed percentage error over all driving events
         """
         cd, cr, eta_combined = x
         
@@ -189,8 +198,8 @@ class ParameterOptimizer:
         if not (ETA_RANGE[0] <= eta_combined <= ETA_RANGE[1]):
             return 1e10
         
-        total_pct_error = 0
-        event_count = 0
+        pct_errors = []
+        weights = []
         
         drivecycle_files = sorted(Path("messy_middle_results").glob(self.dataset["drivecycle_glob"]))
         
@@ -205,13 +214,20 @@ class ParameterOptimizer:
             m_gvwr_kg = drivecycle_data["GVW (kg)"].loc[0]
             
             # Evaluate this event
-            pct_diff = self.evaluate_single_event(cd, cr, eta_combined, drivecycle_data, m_gvwr_kg, driving_event)
-            total_pct_error += pct_diff
-            event_count += 1
+            pct_diff, fuel_unc_pct = self.evaluate_single_event(cd, cr, eta_combined, drivecycle_data, m_gvwr_kg, driving_event)
+            
+            pct_errors.append(pct_diff)
+            
+            # Calculate weight inversely proportional to uncertainty squared
+            weight = 1.0 / (fuel_unc_pct**2 + 1e-6)  # Add small epsilon to avoid division by zero
+            weights.append(weight)
         
-        # Return absolute value of mean signed percentage error (to optimize for bias close to 0)
-        mean_error = total_pct_error / event_count if event_count > 0 else 1e10
-        return abs(mean_error)
+        # Return absolute value of weighted mean signed percentage error (to optimize for bias close to 0)
+        if weights and pct_errors:
+            weighted_mean_error = np.average(pct_errors, weights=weights)
+            return abs(weighted_mean_error)
+        else:
+            return 1e10
     
     def optimize(self):
         """Perform optimization to find best-fit parameters."""
