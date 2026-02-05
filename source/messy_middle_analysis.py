@@ -1,6 +1,7 @@
 """
 Date: 260201
 Author: danikae
+Purpose: Generate drivecycle comparison plots with option for original or optimized parameters
 """
 
 import pandas as pd
@@ -8,10 +9,11 @@ import numpy as np
 import scipy as scipy
 import matplotlib.pyplot as plt
 from pathlib import Path
+import argparse
 import truck_model_tools_messy as truck_model_tools_messy
 import retired.costing_tools_orig as costing_tools
 import retired.emissions_tools_orig as emissions_tools
-import data_collection_tools
+import data_collection_tools_messy
 from costing_and_emissions_tools import get_payload_distribution, get_payload_penalty
 
 new_rc_params = {'text.usetex': False,
@@ -28,6 +30,104 @@ S_PER_H = 3600
 G_PER_KG = 1000
 
 battery_caps = pd.read_csv("messy_middle_results/battery_capacities_linear_summary.csv").set_index('Value')
+
+
+def load_optimized_parameters(use_optimized=False):
+	"""
+	Load parameter optimization results if requested.
+	
+	Parameters:
+	-----------
+	use_optimized : bool
+		If True, load optimized parameters from parameter_optimization_results.csv
+		If False, return None (use original parameters)
+	
+	Returns:
+	--------
+	optimized_params : dict or None
+		Dictionary mapping truck name to optimized parameters (cd, cr, eta_i*eta_m)
+	"""
+	if not use_optimized:
+		return None
+	
+	try:
+		opt_df = pd.read_csv('parameter_optimization_results.csv')
+		# Remove duplicates
+		opt_df = opt_df.drop_duplicates(subset=['Truck'])
+		
+		optimized_params = {}
+		for idx, row in opt_df.iterrows():
+			truck_name = row['Truck']
+			optimized_params[truck_name] = {
+				'cd': row['cd_optimal'],
+				'cr': row['cr_optimal'],
+				'eta_combined': row['eta_optimal'],
+			}
+		
+		print(f"\nLoaded optimized parameters for {len(optimized_params)} trucks")
+		return optimized_params
+	
+	except FileNotFoundError:
+		print("Warning: parameter_optimization_results.csv not found. Using original parameters.")
+		return None
+
+
+def apply_optimized_parameters(parameters, optimized_params, truck_name):
+	"""
+	Apply optimized parameters to a parameters object if available.
+	
+	Parameters:
+	-----------
+	parameters : truck_model_tools_messy.read_parameters or share_parameters
+		Original parameters object
+	optimized_params : dict or None
+		Dictionary of optimized parameters
+	truck_name : str
+		Name of the truck
+	
+	Returns:
+	--------
+	parameters : truck_model_tools_messy.share_parameters
+		Parameters object with optimized values if available
+	"""
+	if optimized_params is None or truck_name not in optimized_params:
+		return parameters
+	
+	opt = optimized_params[truck_name]
+	
+	# Create new parameters object with optimized values
+	# Split combined efficiency back to inverter and motor (use sqrt approximation)
+	eta_opt = np.sqrt(opt['eta_combined'])
+	
+	# Store battery_chemistry if it exists, for later use
+	battery_chemistry = getattr(parameters, 'battery_chemistry', None)
+	
+	optimized = truck_model_tools_messy.share_parameters(
+		m_ave_payload=parameters.m_ave_payload,
+		m_max=parameters.m_max,
+		m_truck_no_bat=parameters.m_truck_no_bat,
+		p_aux=parameters.p_aux,
+		p_motor_max=parameters.p_motor_max,
+		cd=opt['cd'],
+		cr=opt['cr'],
+		a_cabin=parameters.a_cabin,
+		g=parameters.g,
+		rho_air=parameters.rho_air,
+		DoD=parameters.DoD,
+		eta_i=eta_opt,
+		eta_m=eta_opt,
+		eta_gs=parameters.eta_gs,
+		eta_rb=parameters.eta_rb,
+		eta_grid_transmission=parameters.eta_grid_transmission,
+		VMT=parameters.VMT,
+		discountrate=parameters.discountrate,
+	)
+	
+	# Copy over battery_chemistry if it exists
+	if battery_chemistry is not None:
+		optimized.battery_chemistry = battery_chemistry
+	
+	return optimized
 
 
 def plot_drivecycle_comparison(drivecycle_df, model_df, model_fuel_consumption, model_DoD, summary_path, driving_event):
@@ -104,14 +204,24 @@ def plot_drivecycle_comparison(drivecycle_df, model_df, model_fuel_consumption, 
 ######################################### Obtain model parameters #########################################
 average_vmt = 50000
 
-battery_chemistry="NMC"
-battery_params_dict = data_collection_tools.read_battery_params(chemistry=battery_chemistry)
-e_density = battery_params_dict['Energy density (kWh/ton)']
 m_truck_max_lb=82000
 m_truck_max_kg = m_truck_max_lb * KG_PER_LB
 
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='Generate drivecycle comparison plots')
+parser.add_argument('--optimized', action='store_true', 
+					help='Use optimized parameters from parameter_optimization_results.csv')
+args = parser.parse_args()
+
+# Load optimized parameters if requested
+optimized_params = load_optimized_parameters(use_optimized=args.optimized)
+
+# Determine output directory and suffix
+param_suffix = "_optimized" if args.optimized else "_original"
 plots_dir = Path("plots_messy")
 plots_dir.mkdir(parents=True, exist_ok=True)
+
+print(f"\nRunning analysis with {'optimized' if args.optimized else 'original'} parameters")
 
 datasets = [
 	{
@@ -145,12 +255,18 @@ datasets = [
 ]
 
 for dataset in datasets:
-	parameters = data_collection_tools.read_parameters(
+	parameters = data_collection_tools_messy.read_parameters(
 		truck_params=dataset["truck_params"],
 		vmt_params='daycab_vmt_vius_2021',
 		run='messy_middle',
 		truck_type='EV',
 	)
+
+	# Apply optimized parameters if requested
+	parameters = apply_optimized_parameters(parameters, optimized_params, dataset['name'])
+
+	battery_params_dict = data_collection_tools_messy.read_battery_params(chemistry=parameters.battery_chemistry)
+	e_density = battery_params_dict['Energy density (kWh/ton)']
 
 	e_bat = battery_caps.loc['Mean', dataset["battery_col"]]
 	m_bat_kg = e_bat / e_density * KG_PER_TON          # Battery mass, in kg
@@ -197,7 +313,7 @@ for dataset in datasets:
 		)
 
 		fig.savefig(
-			plots_dir / f"{dataset['name']}_drivecycle_{driving_event}_comparison.png",
+			plots_dir / f"{dataset['name']}_drivecycle_{driving_event}_comparison{param_suffix}.png",
 			dpi=300,
 			bbox_inches="tight",
 		)
