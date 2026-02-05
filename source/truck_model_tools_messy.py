@@ -41,6 +41,9 @@ class read_parameters:
     self.cd = float(df_truck_params['Value'].loc['Drag coefficient'])
     self.cr = float(df_truck_params['Value'].loc['Resistance coefficient'])
     self.a_cabin = float(df_truck_params['Value'].loc['Frontal cabin area'])
+
+    # Battery chemistry
+    self.battery_chemistry = df_truck_params['Value'].loc['Battery chemistry']
     
     # Constants
     self.g = float(df_constants['Value'].loc['Gravitational acceleration'])
