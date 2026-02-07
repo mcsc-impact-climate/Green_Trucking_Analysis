@@ -138,6 +138,24 @@ def plot_drivecycle_comparison(drivecycle_df, model_df, model_fuel_consumption, 
 
 	nacfe_fuel_consumption = summary_df.loc[driving_event, "Fuel economy (kWh/mile)"]
 	nacfe_DoD_percent = summary_df.loc[driving_event, "Depth of Discharge (%)"]
+	
+	# Calculate standard error in the mean (SEM) for this driving event from instantaneous measurements
+	# SEM = std(instantaneous_fuel_economy) / sqrt(n)
+	# where n is the number of valid instantaneous measurements
+	instantaneous_fuel = drivecycle_df['Instantaneous Energy (kWh/mile)'].dropna()
+	if len(instantaneous_fuel) > 1:
+		nacfe_fuel_sem = instantaneous_fuel.std() / np.sqrt(len(instantaneous_fuel))
+		nacfe_fuel_sem_pct = (nacfe_fuel_sem / nacfe_fuel_consumption * 100) if nacfe_fuel_consumption > 0 else 0
+	else:
+		nacfe_fuel_sem_pct = 0
+	
+	# For DoD: The SOC decreases monotonically during the drive, so its std doesn't represent measurement uncertainty.
+	# Instead, estimate uncertainty from the precision of SOC measurements (typically ±0.1-0.5% for BMS)
+	# Using ±0.5% as a conservative estimate for SOC measurement precision
+	# DoD uncertainty propagates from initial and final SOC: sqrt(σ_initial² + σ_final²)
+	soc_measurement_precision = 0.5  # percent
+	dod_uncertainty = np.sqrt(2) * soc_measurement_precision  # sqrt(2) because initial and final measurements
+	nacfe_DoD_sem_pct = (dod_uncertainty / nacfe_DoD_percent * 100) if nacfe_DoD_percent > 0 else 0
 
 	time_s = drivecycle_df["Time (s)"]
 	speed_mps = drivecycle_df["Vehicle speed (m/s)"]
@@ -186,11 +204,11 @@ def plot_drivecycle_comparison(drivecycle_df, model_df, model_fuel_consumption, 
 		0.85,
 		(
 			f"Fuel economy (kWh/mi)\n"
-			f"  NACFE: {nacfe_fuel_consumption:.3f}\n"
+			f"  NACFE: {nacfe_fuel_consumption:.3f} ± {nacfe_fuel_sem_pct:.1f}%\n"
 			f"  Model: {model_fuel_consumption:.3f}\n"
 			f"  % diff: {fuel_pct_diff:+.2f}%\n\n"
 			f"DoD (%)\n"
-			f"  NACFE: {nacfe_DoD_percent:.3f}\n"
+			f"  NACFE: {nacfe_DoD_percent:.3f} ± {nacfe_DoD_sem_pct:.1f}%\n"
 			f"  Model: {model_DoD_percent:.3f}\n"
 			f"  % diff: {DoD_pct_diff:+.2f}%"
 		),
@@ -199,6 +217,104 @@ def plot_drivecycle_comparison(drivecycle_df, model_df, model_fuel_consumption, 
 	)
 
 	return fig
+
+
+def plot_truck_summary(truck_name, results, param_suffix, plots_dir):
+	"""
+	Create summary plots comparing model vs data for all driving events.
+	
+	Parameters:
+	-----------
+	truck_name : str
+		Name of the truck
+	results : list of dict
+		List of dictionaries containing results for each driving event
+	param_suffix : str
+		Suffix indicating parameter type ('_original' or '_optimized')
+	plots_dir : Path
+		Directory to save plots
+	"""
+	if not results:
+		return
+	
+	# Extract data
+	events = [r['event'] for r in results]
+	data_fuel = np.array([r['data_fuel'] for r in results])
+	model_fuel = np.array([r['model_fuel'] for r in results])
+	fuel_unc_pct = np.array([r['fuel_unc_pct'] for r in results])
+	data_dod = np.array([r['data_dod'] for r in results])
+	model_dod = np.array([r['model_dod'] for r in results])
+	dod_unc_pct = np.array([r['dod_unc_pct'] for r in results])
+	
+	# Calculate absolute uncertainties for error bars
+	fuel_unc = data_fuel * fuel_unc_pct / 100
+	dod_unc = data_dod * dod_unc_pct / 100
+	
+	# Create figure with two subplots
+	fig, axes = plt.subplots(2, 1, figsize=(12, 10))
+	
+	# Fuel Economy comparison
+	ax1 = axes[0]
+	x = np.arange(len(events))
+	width = 0.35
+	
+	ax1.bar(x - width/2, data_fuel, width, label='NACFE Data', alpha=0.8, color='tab:blue')
+	ax1.errorbar(x - width/2, data_fuel, yerr=fuel_unc, fmt='none', color='black', capsize=3, linewidth=1)
+	ax1.bar(x + width/2, model_fuel, width, label='Model', alpha=0.8, color='tab:orange')
+	
+	ax1.set_ylabel('Fuel Economy (kWh/mile)')
+	ax1.set_title(f'{truck_name} - Fuel Economy Comparison')
+	ax1.set_xticks(x)
+	ax1.set_xticklabels(events, rotation=45, ha='right')
+	ax1.set_xlabel('Driving Event')
+	ax1.legend()
+	ax1.grid(True, alpha=0.3, axis='y')
+	
+	# Add mean comparison as text
+	mean_data_fuel = data_fuel.mean()
+	mean_model_fuel = model_fuel.mean()
+	mean_fuel_diff_pct = (mean_model_fuel - mean_data_fuel) / mean_data_fuel * 100
+	
+	ax1.axhline(y=mean_data_fuel, color='tab:blue', linestyle='--', linewidth=2, alpha=0.5, label=f'Mean Data: {mean_data_fuel:.3f}')
+	ax1.axhline(y=mean_model_fuel, color='tab:orange', linestyle='--', linewidth=2, alpha=0.5, label=f'Mean Model: {mean_model_fuel:.3f}')
+	ax1.legend()
+	
+	ax1.text(0.02, 0.98, f'Mean difference: {mean_fuel_diff_pct:+.2f}%', 
+			transform=ax1.transAxes, verticalalignment='top',
+			bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+	
+	# DoD comparison
+	ax2 = axes[1]
+	ax2.bar(x - width/2, data_dod, width, label='NACFE Data', alpha=0.8, color='tab:blue')
+	ax2.errorbar(x - width/2, data_dod, yerr=dod_unc, fmt='none', color='black', capsize=3, linewidth=1)
+	ax2.bar(x + width/2, model_dod, width, label='Model', alpha=0.8, color='tab:orange')
+	
+	ax2.set_ylabel('Depth of Discharge (%)')
+	ax2.set_title(f'{truck_name} - DoD Comparison')
+	ax2.set_xticks(x)
+	ax2.set_xticklabels(events, rotation=45, ha='right')
+	ax2.set_xlabel('Driving Event')
+	ax2.legend()
+	ax2.grid(True, alpha=0.3, axis='y')
+	
+	# Add mean comparison as text
+	mean_data_dod = data_dod.mean()
+	mean_model_dod = model_dod.mean()
+	mean_dod_diff_pct = (mean_model_dod - mean_data_dod) / mean_data_dod * 100
+	
+	ax2.axhline(y=mean_data_dod, color='tab:blue', linestyle='--', linewidth=2, alpha=0.5, label=f'Mean Data: {mean_data_dod:.3f}')
+	ax2.axhline(y=mean_model_dod, color='tab:orange', linestyle='--', linewidth=2, alpha=0.5, label=f'Mean Model: {mean_model_dod:.3f}')
+	ax2.legend()
+	
+	ax2.text(0.02, 0.98, f'Mean difference: {mean_dod_diff_pct:+.2f}%', 
+			transform=ax2.transAxes, verticalalignment='top',
+			bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+	
+	plt.tight_layout()
+	plt.savefig(plots_dir / f'{truck_name}_summary{param_suffix}.png', dpi=300, bbox_inches='tight')
+	plt.close(fig)
+	
+	print(f"  Summary plot saved: {truck_name}_summary{param_suffix}.png")
 
 
 ######################################### Obtain model parameters #########################################
@@ -255,6 +371,8 @@ datasets = [
 ]
 
 for dataset in datasets:
+	print(f"\nProcessing {dataset['name']}...")
+	
 	parameters = data_collection_tools_messy.read_parameters(
 		truck_params=dataset["truck_params"],
 		vmt_params='daycab_vmt_vius_2021',
@@ -276,6 +394,12 @@ for dataset in datasets:
 	m_truck_no_bat_lb = m_truck_no_bat_kg / KG_PER_LB
 
 	drivecycle_files = sorted(Path("messy_middle_results").glob(dataset["drivecycle_glob"]))
+	
+	# Collect results for summary plot
+	truck_results = []
+	
+	# Read summary data for uncertainties
+	summary_df = pd.read_csv(dataset["summary_path"], index_col="Driving event")
 
 	for drivecycle_path in drivecycle_files:
 		drivecycle_data = truck_model_tools_messy.extract_drivecycle_data(str(drivecycle_path))
@@ -302,6 +426,34 @@ for dataset in datasets:
 
 		parts = drivecycle_path.stem.split("_")
 		driving_event = int(parts[-2]) if parts[-1] == "detailed" else int(parts[-1])
+		
+		# Get data values and uncertainties
+		if driving_event in summary_df.index:
+			data_fuel_consumption = summary_df.loc[driving_event, "Fuel economy (kWh/mile)"]
+			data_DoD_percent = summary_df.loc[driving_event, "Depth of Discharge (%)"]
+			
+			# Calculate uncertainties
+			instantaneous_fuel = drivecycle_data['Instantaneous Energy (kWh/mile)'].dropna()
+			if len(instantaneous_fuel) > 1:
+				fuel_sem = instantaneous_fuel.std() / np.sqrt(len(instantaneous_fuel))
+				fuel_sem_pct = (fuel_sem / data_fuel_consumption * 100) if data_fuel_consumption > 0 else 0
+			else:
+				fuel_sem_pct = 0
+			
+			soc_measurement_precision = 0.5
+			dod_uncertainty = np.sqrt(2) * soc_measurement_precision
+			dod_sem_pct = (dod_uncertainty / data_DoD_percent * 100) if data_DoD_percent > 0 else 0
+			
+			# Store results
+			truck_results.append({
+				'event': driving_event,
+				'data_fuel': data_fuel_consumption,
+				'model_fuel': fuel_consumption,
+				'fuel_unc_pct': fuel_sem_pct,
+				'data_dod': data_DoD_percent,
+				'model_dod': DoD * 100,
+				'dod_unc_pct': dod_sem_pct,
+			})
 
 		fig = plot_drivecycle_comparison(
 			drivecycle_data,
@@ -318,5 +470,9 @@ for dataset in datasets:
 			bbox_inches="tight",
 		)
 		plt.close(fig)
-
-
+	
+	# Save results to CSV for later summary plotting
+	if truck_results:
+		results_df = pd.DataFrame(truck_results)
+		results_df.to_csv(plots_dir / f"{dataset['name']}_results{param_suffix}.csv", index=False)
+		print(f"Saved results to {dataset['name']}_results{param_suffix}.csv")
