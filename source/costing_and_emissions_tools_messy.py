@@ -298,7 +298,7 @@ Inputs:
     - e_bat (float): Energy capacity of the truck battery, in kWh
     - max_battery_cycles (int): Maximum number of full battery charge-discharge cycles before it needs to be replaced
 """
-def calculate_replacements(VMT_df, mileage, e_bat=825, max_battery_cycles=1000):
+def calculate_replacements(VMT_df, mileage, e_bat=825, max_battery_cycles=2000):
     lifetime_miles_traveled = VMT_df.sum()
     lifetime_kWh_charged = lifetime_miles_traveled * mileage
     lifetime_cycles = lifetime_kWh_charged / e_bat

@@ -1279,7 +1279,388 @@ def plot_distribution_comparisons_all_drivecycles(datasets, plots_dir, param_suf
 	)
 
 
-def sensitivity_analysis(datasets, plots_dir, optimized_params, battery_caps, m_truck_max_kg, param_suffix):
+def sensitivity_analysis_simple(datasets, plots_dir, optimized_params, battery_caps, m_truck_max_kg, param_suffix, average_vmt=100000):
+	"""
+	Simple sensitivity analysis: compute TCO premium from scratch for each parameter variation.
+	This ensures we're properly accounting for parameter changes in both EV and diesel costs.
+	"""
+	import time
+	
+	# Load parameter ranges
+	param_ranges_df = pd.read_csv(BASE_DIR / "data_messy" / "parameter_sensitivity_ranges.csv").set_index("Parameter")
+	param_ranges = param_ranges_df.to_dict("index")
+	
+	# Load US average values
+	usa_data = pd.read_csv(str(BASE_DIR / "data_messy" / "energy_costs_emissions_usa.csv")).set_index("Parameter")
+	electricity_cost_baseline = usa_data.loc["Commercial electricity ($/kWh)", "Value"]
+	demand_charge_baseline = usa_data.loc["Demand charge ($/kW)", "Value"]
+	diesel_cost_baseline = usa_data.loc["Diesel cost ($/gal)", "Value"]
+	
+	# Load charging power data
+	max_charging_power_data = pd.read_csv(str(BASE_DIR / "messy_middle_results" / "max_charging_powers.csv"), index_col="truck_name")
+	
+	# Load all drivecycles once
+	all_drivecycle_files = sorted((BASE_DIR / "messy_middle_results").glob("*_drivecycle_*_detailed.csv"))
+	drivecycles_by_source = {}
+	for drivecycle_path in all_drivecycle_files:
+		parts = drivecycle_path.stem.split("_")
+		if "drivecycle" in parts:
+			drivecycle_idx = parts.index("drivecycle")
+			source_truck = "_".join(parts[:drivecycle_idx])
+			driving_event = int(parts[drivecycle_idx + 1])
+		else:
+			source_truck = parts[0]
+			driving_event = int(parts[-2]) if parts[-1] == "detailed" else int(parts[-1])
+		
+		if source_truck not in drivecycles_by_source:
+			drivecycles_by_source[source_truck] = []
+		drivecycles_by_source[source_truck].append((drivecycle_path, driving_event))
+	
+	tornado_data = {}
+	sensitivity_dir = plots_dir / f"sensitivity_analysis{param_suffix}"
+	sensitivity_dir.mkdir(parents=True, exist_ok=True)
+	
+	print("\n" + "="*80)
+	print("SENSITIVITY ANALYSIS: EV TCO Premium vs Diesel (From Scratch)")
+	print("="*80)
+	
+	for dataset in datasets:
+		truck_name = dataset["name"]
+		print(f"\n{'='*80}")
+		print(f"Analyzing: {truck_name}")
+		print(f"{'='*80}")
+		
+		# Load truck parameters
+		parameters = data_collection_tools_messy.read_parameters(
+			truck_params=dataset["truck_params"],
+			vmt_params="daycab_vmt_vius_2021",
+			run="messy_middle",
+			truck_type="EV",
+		)
+		parameters = apply_optimized_parameters(parameters, optimized_params, truck_name)
+		
+		battery_params_dict = data_collection_tools_messy.read_battery_params(chemistry=parameters.battery_chemistry)
+		e_density = battery_params_dict['Energy density (kWh/ton)']
+		
+		e_bat_baseline = battery_caps.loc['Mean', dataset["battery_col"]]
+		m_bat_kg_baseline = e_bat_baseline / e_density * KG_PER_TON
+		m_bat_lb_baseline = m_bat_kg_baseline / KG_PER_LB
+		
+		m_truck_no_bat_kg = parameters.m_truck_no_bat
+		m_truck_no_bat_lb = m_truck_no_bat_kg / KG_PER_LB
+		
+		# Extract mean VMT
+		if isinstance(parameters.VMT, pd.DataFrame):
+			vmt_baseline = parameters.VMT['VMT (miles)'].mean()
+		else:
+			vmt_baseline = parameters.VMT
+		
+		max_charging_power = max_charging_power_data.loc[truck_name, "99th_percentile_charging_power_kw"]
+		
+		diesel_truck_params = f"{dataset['truck_params']}_diesel"
+		
+		# Define parameters to scan
+		params_to_scan = [
+			("VMT (miles/year)", vmt_baseline, param_ranges["VMT (miles/year)"]),
+			("Electricity Cost ($/kWh)", electricity_cost_baseline, param_ranges["Electricity Cost ($/kWh)"]),
+			("Demand Charge ($/kW)", demand_charge_baseline, param_ranges["Demand Charge ($/kW)"]),
+			("Diesel Cost ($/gal)", diesel_cost_baseline, param_ranges["Diesel Cost ($/gal)"]),
+			("Battery Capacity (kWh)", e_bat_baseline, param_ranges["Battery Capacity (kWh)"]),
+		]
+		
+		tornado_impacts = {}
+		sensitivity_results = {}
+		
+		# Baseline premium
+		print("\nCalculating baseline premium...")
+		baseline_premium = 0
+		baseline_count = 0
+		for source_truck, drivecycle_list in drivecycles_by_source.items():
+			for drivecycle_path, driving_event in drivecycle_list[:1]:  # Sample to estimate baseline
+				try:
+					drivecycle_data = truck_model_tools_messy.extract_drivecycle_data(str(drivecycle_path))
+					m_gvwr_kg = drivecycle_data["GVW (kg)"].loc[0]
+					m_gvwr_lb = m_gvwr_kg / KG_PER_LB
+					m_payload_lb = m_gvwr_lb - m_truck_no_bat_lb - m_bat_lb_baseline
+					
+					# EV cost
+					_, ev_fuel_kwh_per_mi, _ = truck_model_tools_messy.truck_model(parameters).get_power_requirement(
+						drivecycle_data, m_gvwr_kg, 
+						eta_battery=battery_params_dict['Roundtrip efficiency'],
+						e_bat=e_bat_baseline,
+					)
+					ev_cost_dict = evaluate_costs(
+						mileage=ev_fuel_kwh_per_mi,
+						payload_lb=m_payload_lb,
+						electricity_charge=electricity_cost_baseline,
+						demand_charge=demand_charge_baseline,
+						average_VMT=vmt_baseline,
+						charging_power=max_charging_power,
+						e_bat=e_bat_baseline,
+						battery_chemistry=parameters.battery_chemistry,
+						truck_name=dataset["truck_params"],
+					)
+					ev_tco = ev_cost_dict["TCO ($/mi)"]
+					
+					# Diesel cost
+					diesel_parameters = data_collection_tools_messy.read_parameters(
+						truck_params=diesel_truck_params,
+						vmt_params="daycab_vmt_vius_2021",
+						run="messy_middle",
+						truck_type="diesel",
+					)
+					diesel_parameters.cd = parameters.cd
+					diesel_parameters.cr = parameters.cr
+					
+					_, diesel_fuel_kwh_per_mi, diesel_mpg = truck_model_tools_diesel_messy.truck_model(diesel_parameters).get_power_requirement(
+						drivecycle_data, m_gvwr_kg
+					)
+					diesel_cost_dict = evaluate_costs_diesel(
+						mileage_mpg=diesel_mpg,
+						payload_lb=m_payload_lb,
+						diesel_price=diesel_cost_baseline,
+						average_VMT=vmt_baseline,
+						truck_type=diesel_truck_params,
+					)
+					diesel_tco = diesel_cost_dict["TCO ($/mi)"]
+					
+					premium = ((ev_tco - diesel_tco) / diesel_tco) * 100
+					baseline_premium += premium
+					baseline_count += 1
+				except Exception as e:
+					pass
+		
+		if baseline_count > 0:
+			baseline_premium /= baseline_count
+		
+		print(f"Baseline EV TCO Premium: {baseline_premium:.2f}%")
+		
+		# Scan each parameter
+		total_params = len(params_to_scan)
+		for param_idx, (param_name, current_val, param_range) in enumerate(params_to_scan, 1):
+			start_time = time.time()
+			print(f"\n[{param_idx}/{total_params}] Scanning: {param_name}")
+			
+			range_min = param_range["Min"]
+			range_max = param_range["Max"]
+			n_points = 2  # Min and max only for fast testing
+			
+			# Generate equally spaced values (just min and max)
+			scan_values = np.linspace(range_min, range_max, n_points)
+			print(f"  Range: {range_min} to {range_max}")
+			print(f"  Current value: {current_val:.6f}")
+			print(f"  Scan points: {', '.join([f'{v:.4f}' for v in scan_values])}")
+			
+			param_results = []
+			premiums = []
+			
+			for point_idx, scan_value in enumerate(scan_values, 1):
+				try:
+					# Calculate average premium with this parameter value
+					avg_premium = 0
+					count = 0
+					
+					# Sample a subset of drivecycles for speed
+					sample_size = min(3, len(drivecycles_by_source))  # Sample 3 trucks worth
+					for source_idx, (source_truck, drivecycle_list) in enumerate(drivecycles_by_source.items()):
+						if source_idx >= sample_size:
+							break
+						
+						for sample_idx, (drivecycle_path, driving_event) in enumerate(drivecycle_list):
+							if sample_idx >= 2:  # 2 drivecycles per truck
+								break
+							
+							drivecycle_data = truck_model_tools_messy.extract_drivecycle_data(str(drivecycle_path))
+							m_gvwr_kg = drivecycle_data["GVW (kg)"].loc[0]
+							m_gvwr_lb = m_gvwr_kg / KG_PER_LB
+							m_payload_lb = m_gvwr_lb - m_truck_no_bat_lb - m_bat_lb_baseline
+							
+							# Use current parameter values for EV, but vary the scanned one
+							if param_name == "Electricity Cost ($/kWh)":
+								elec_cost = scan_value
+								demand_ch = demand_charge_baseline
+								diesel_p = diesel_cost_baseline
+								vmt = vmt_baseline
+								e_bat = e_bat_baseline
+							elif param_name == "Demand Charge ($/kW)":
+								elec_cost = electricity_cost_baseline
+								demand_ch = scan_value
+								diesel_p = diesel_cost_baseline
+								vmt = vmt_baseline
+								e_bat = e_bat_baseline
+							elif param_name == "Diesel Cost ($/gal)":
+								elec_cost = electricity_cost_baseline
+								demand_ch = demand_charge_baseline
+								diesel_p = scan_value
+								vmt = vmt_baseline
+								e_bat = e_bat_baseline
+							elif param_name == "VMT (miles/year)":
+								elec_cost = electricity_cost_baseline
+								demand_ch = demand_charge_baseline
+								diesel_p = diesel_cost_baseline
+								vmt = scan_value
+								e_bat = e_bat_baseline
+							elif param_name == "Battery Capacity (kWh)":
+								elec_cost = electricity_cost_baseline
+								demand_ch = demand_charge_baseline
+								diesel_p = diesel_cost_baseline
+								vmt = vmt_baseline
+								e_bat = scan_value
+							
+							# EV cost with scanned parameter
+							_, ev_fuel_kwh_per_mi, _ = truck_model_tools_messy.truck_model(parameters).get_power_requirement(
+								drivecycle_data, m_gvwr_kg,
+								eta_battery=battery_params_dict['Roundtrip efficiency'],
+								e_bat=e_bat,
+							)
+							ev_cost_dict = evaluate_costs(
+								mileage=ev_fuel_kwh_per_mi,
+								payload_lb=m_payload_lb,
+								electricity_charge=elec_cost,
+								demand_charge=demand_ch,
+								average_VMT=vmt,
+								charging_power=max_charging_power,
+								e_bat=e_bat,
+								battery_chemistry=parameters.battery_chemistry,
+								truck_name=dataset["truck_params"],
+							)
+							ev_tco = ev_cost_dict["TCO ($/mi)"]
+							
+							# Diesel cost with scanned parameter
+							_, _, diesel_mpg = truck_model_tools_diesel_messy.truck_model(diesel_parameters).get_power_requirement(
+								drivecycle_data, m_gvwr_kg
+							)
+							diesel_cost_dict = evaluate_costs_diesel(
+								mileage_mpg=diesel_mpg,
+								payload_lb=m_payload_lb,
+								diesel_price=diesel_p,
+								average_VMT=vmt,
+								truck_type=diesel_truck_params,
+							)
+							diesel_tco = diesel_cost_dict["TCO ($/mi)"]
+							
+							premium = ((ev_tco - diesel_tco) / diesel_tco) * 100
+							avg_premium += premium
+							count += 1
+					
+					if count > 0:
+						avg_premium /= count
+					
+					premiums.append(avg_premium)
+					param_results.append({
+						"parameter_value": scan_value,
+						"tco_premium_%": avg_premium,
+					})
+					
+					elapsed = time.time() - start_time
+					avg_time_per_point = elapsed / point_idx
+					eta = avg_time_per_point * (n_points - point_idx)
+					print(f"    [{point_idx}/{n_points}] Value: {scan_value:.4f} → Premium: {avg_premium:.2f}% (Elapsed: {elapsed:.1f}s, ETA: {eta:.1f}s)")
+					
+				except Exception as e:
+					print(f"    [{point_idx}/{n_points}] Value: {scan_value:.4f} → ERROR: {str(e)[:80]}")
+					premiums.append(np.nan)
+					param_results.append({
+						"parameter_value": scan_value,
+						"tco_premium_%": np.nan,
+					})
+			
+			# Calculate impact
+			valid_premiums = [p for p in premiums if not np.isnan(p)]
+			if valid_premiums:
+				impact = max(valid_premiums) - min(valid_premiums)
+				tornado_impacts[param_name] = impact
+			else:
+				tornado_impacts[param_name] = 0
+			
+			# Save results
+			sensitivity_results[param_name] = pd.DataFrame(param_results)
+			param_filename = param_name.replace(" ", "_").replace("(", "").replace(")", "").replace("$", "").replace("/", "_")
+			csv_path = sensitivity_dir / f"{truck_name}_{param_filename}_sensitivity.csv"
+			pd.DataFrame(param_results).to_csv(csv_path, index=False)
+			
+			elapsed_total = time.time() - start_time
+			print(f"  ✓ Completed in {elapsed_total:.1f}s, Impact: {tornado_impacts[param_name]:.2f}%")
+		
+		tornado_data[truck_name] = tornado_impacts
+		
+		# Create sensitivity plots
+		fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+		fig.suptitle(f"{truck_name} - TCO Premium Sensitivity Analysis", fontsize=16, fontweight='bold')
+		axes_flat = axes.flatten()
+		
+		for ax_idx, (param_name, results_df) in enumerate(sensitivity_results.items()):
+			if ax_idx >= len(axes_flat):
+				break
+			
+			ax = axes_flat[ax_idx]
+			x_values = results_df["parameter_value"].values
+			y_values = results_df["tco_premium_%"].values
+			
+			ax.plot(x_values, y_values, 'b-o', linewidth=2, markersize=6, label="Sensitivity scan")
+			
+			# Mark current value
+			current_param_val = [v for k, v, _ in params_to_scan if k == param_name]
+			if current_param_val:
+				current_param_val = current_param_val[0]
+				ax.axvline(x=current_param_val, color='red', linestyle='--', linewidth=2, label="Current value")
+			
+			ax.set_xlabel(param_name)
+			ax.set_ylabel("EV TCO Premium (%)")
+			ax.grid(True, alpha=0.3)
+			ax.legend(fontsize=8)
+		
+		for ax_idx in range(len(sensitivity_results), len(axes_flat)):
+			axes_flat[ax_idx].set_visible(False)
+		
+		plt.tight_layout()
+		plot_path = sensitivity_dir / f"{truck_name}_sensitivity_scans{param_suffix}.png"
+		plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+		print(f"\nSaved sensitivity scan plots: {plot_path}")
+		plt.close(fig)
+	
+	# Create tornado plot
+	if tornado_data:
+		fig, axes = plt.subplots(1, len(datasets), figsize=(6*len(datasets), 8))
+		if len(datasets) == 1:
+			axes = [axes]
+		
+		for ax_idx, dataset in enumerate(datasets):
+			truck_name = dataset["name"]
+			if truck_name not in tornado_data:
+				continue
+			
+			impacts = tornado_data[truck_name]
+			sorted_params = sorted(impacts.items(), key=lambda x: x[1], reverse=True)
+			param_names = [p[0] for p in sorted_params]
+			impact_values = [p[1] for p in sorted_params]
+			
+			ax = axes[ax_idx]
+			y_pos = np.arange(len(param_names))
+			colors = plt.cm.RdYlGn_r(np.linspace(0.2, 0.8, len(param_names)))
+			ax.barh(y_pos, impact_values, color=colors)
+			
+			ax.set_yticks(y_pos)
+			ax.set_yticklabels(param_names, fontsize=10)
+			ax.set_xlabel("TCO Premium Impact (%)", fontsize=11)
+			ax.set_title(f"{truck_name}", fontsize=12, fontweight='bold')
+			ax.grid(True, alpha=0.3, axis='x')
+			
+			for i, (param, impact) in enumerate(zip(param_names, impact_values)):
+				ax.text(impact, i, f" {impact:.1f}%", va='center', fontsize=9)
+		
+		plt.suptitle("Tornado Plot: Parameter Impact on EV TCO Premium", fontsize=14, fontweight='bold')
+		plt.tight_layout()
+		plot_path = plots_dir / f"tornado_plot{param_suffix}.png"
+		plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+		print(f"\nSaved tornado plot: {plot_path}")
+		plt.close(fig)
+		
+		# Save tornado data
+		tornado_csv_path = plots_dir / f"tornado_data{param_suffix}.csv"
+		tornado_df = pd.DataFrame(tornado_data).T
+		tornado_df.to_csv(tornado_csv_path)
+		print(f"Saved tornado data: {tornado_csv_path}")
 	"""
 	Perform sensitivity analysis of EV cost premium relative to diesel across parameter ranges.
 	
@@ -1357,7 +1738,12 @@ def sensitivity_analysis(datasets, plots_dir, optimized_params, battery_caps, m_
 		m_truck_no_bat_kg = parameters.m_truck_no_bat
 		m_truck_no_bat_lb = m_truck_no_bat_kg / KG_PER_LB
 		
-		vmt_current = parameters.VMT
+		# Extract mean VMT from DataFrame
+		if isinstance(parameters.VMT, pd.DataFrame):
+			vmt_current = parameters.VMT['VMT (miles)'].mean()
+		else:
+			vmt_current = parameters.VMT
+		
 		max_charging_power = max_charging_power_data.loc[truck_name, "99th_percentile_charging_power_kw"]
 		
 		# Baseline premium
@@ -1398,17 +1784,12 @@ def sensitivity_analysis(datasets, plots_dir, optimized_params, battery_caps, m_
 				"range": param_ranges["Battery Capacity (kWh)"],
 				"n_points": 5,
 			},
-			"Battery Cost ($/kWh)": {
-				"current": None,  # Will be extracted from costing function
-				"range": param_ranges["Battery Cost ($/kWh)"],
-				"n_points": 5,
-			},
 			"Payload (lb)": {
-				"current": 0,  # We'll vary average payload
+				"current": 35000,  # Average payload
 				"range": param_ranges["Payload (lb)"],
 				"n_points": 5,
 			},
-		}
+		}  # Note: Battery Cost requires deeper integration with costing functions
 		
 		# Scan each parameter
 		total_params = len(sensitivity_params)
@@ -1583,11 +1964,6 @@ def sensitivity_analysis(datasets, plots_dir, optimized_params, battery_caps, m_
 							diesel_costs.append(row["diesel_cost_TCO ($/mi)"])
 						
 						avg_premium = ((np.mean(ev_costs) - np.mean(diesel_costs)) / np.mean(diesel_costs)) * 100
-						
-					elif param_name == "Battery Cost ($/kWh)":
-						# Battery cost: We approximate this by scaling the capital cost component
-						# This is a proxy - actual implementation would require modifying evaluate_costs
-						avg_premium = baseline_premium_pct  # Placeholder for now
 						
 					elif param_name == "Payload (lb)":
 						# Payload variation
@@ -1902,13 +2278,14 @@ def main():
 	print("\n" + "="*80)
 	print("STARTING SENSITIVITY ANALYSIS")
 	print("="*80)
-	sensitivity_analysis(
+	sensitivity_analysis_simple(
 		datasets=datasets,
 		plots_dir=plots_dir,
 		optimized_params=optimized_params,
 		battery_caps=battery_caps,
 		m_truck_max_kg=m_truck_max_kg,
 		param_suffix=param_suffix,
+		average_vmt=average_vmt,
 	)
 	print("\n" + "="*80)
 	print("SENSITIVITY ANALYSIS COMPLETE")
