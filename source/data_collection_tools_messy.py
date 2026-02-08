@@ -6,27 +6,30 @@ Note: Code adapted by Danika MacDonell from a colab notebook written by Kariana 
 
 from pdb import run
 import pandas as pd
+from pathlib import Path
 import truck_model_tools_messy
 import truck_model_tools_diesel
+
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Function to read in non-battery parameters for the truck model
 def read_parameters(truck_params='default', economy_params='default', vmt_params='default', truck_type='EV', run='messy_middle'):
     if run == 'messy_middle':
-        data_dir = 'data_messy'
+        data_dir = BASE_DIR / 'data_messy'
     else:
-        data_dir = 'data'
-    truck_params_str = f'{data_dir}/{truck_params}_truck_params.csv'
-    economy_params_str = f'{data_dir}/{economy_params}_economy_params.csv'
-    vmt_params_str = f'{data_dir}/{vmt_params}.csv'
+        data_dir = BASE_DIR / 'data'
+    truck_params_str = str(data_dir / f'{truck_params}_truck_params.csv')
+    economy_params_str = str(data_dir / f'{economy_params}_economy_params.csv')
+    vmt_params_str = str(data_dir / f'{vmt_params}.csv')
     if truck_type == 'EV':
-        parameters = truck_model_tools_messy.read_parameters(truck_params_str, economy_params_str, f'{data_dir}/constants.csv', vmt_params_str)
+        parameters = truck_model_tools_messy.read_parameters(truck_params_str, economy_params_str, str(data_dir / 'constants.csv'), vmt_params_str)
     else:
-        parameters = truck_model_tools_diesel.read_parameters(truck_params_str, economy_params_str, f'{data_dir}/constants.csv', vmt_params_str)
+        parameters = truck_model_tools_diesel.read_parameters(truck_params_str, economy_params_str, str(data_dir / 'constants.csv'), vmt_params_str)
     return parameters
 
 # Function to read in battery parameters for the truck model
 def read_battery_params(battery_params='default', chemistry='NMC'):
-    battery_params_str = f'data_messy/default_battery_params.csv'
+    battery_params_str = str(BASE_DIR / 'data_messy' / 'default_battery_params.csv')
     df_battery_data = pd.read_csv(battery_params_str, index_col=0)
     
     battery_params_dict = {
@@ -39,7 +42,7 @@ def read_battery_params(battery_params='default', chemistry='NMC'):
     return battery_params_dict
     
 def read_truck_cost_data(truck = 'class_8_daycab', truck_type = 'EV', chemistry='NMC'):
-    df_truck_cost = pd.read_csv(f'data_messy/{truck}_cost_data.csv', index_col=0)
+    df_truck_cost = pd.read_csv(str(BASE_DIR / 'data_messy' / f'{truck}_cost_data.csv'), index_col=0)
     
     truck_cost_data_dict = {}
     
