@@ -17,7 +17,7 @@ import truck_model_tools_diesel_messy as truck_model_tools_diesel_messy
 import retired.costing_tools_orig as costing_tools
 import retired.emissions_tools_orig as emissions_tools
 import data_collection_tools_messy
-from costing_and_emissions_tools_messy import get_payload_distribution, get_payload_penalty, evaluate_emissions, evaluate_costs, evaluate_costs_diesel
+from costing_and_emissions_tools_messy import get_payload_distribution, get_payload_penalty, evaluate_emissions, evaluate_costs, evaluate_costs_diesel, calculate_replacements
 
 new_rc_params = {'text.usetex': False,
 "svg.fonttype": 'none'
@@ -1298,6 +1298,9 @@ def main():
 	param_suffix = "_optimized" if optimized else "_original"
 	plots_dir = Path("plots_messy")
 	plots_dir.mkdir(parents=True, exist_ok=True)
+
+	# Make plots_dir absolute to reference files from root
+	plots_dir = BASE_DIR / "plots_messy"
 	
 	model_results_dir = plots_dir / f"model_results{param_suffix}"
 	if regenerate_model_results:
@@ -1338,11 +1341,6 @@ def main():
 			"summary_path": "messy_middle_results/nevoya_with_weight_drivecycle_data.csv",
 		},
 	]
-	
-	# process_drivecycles_and_save_results(
-	# 	datasets=datasets,
-	# 	regenerate_model_results=regenerate_model_results,
-	# 	model_results_dir=model_results_dir,
 	# 	optimized_params=optimized_params,
 	# 	battery_caps=battery_caps,
 	# 	m_truck_max_kg=m_truck_max_kg,
@@ -1399,24 +1397,554 @@ def main():
 	# 	param_suffix=param_suffix,
 	# )
 
-	# Evaluate diesel model on all drivecycles (using EV-optimized cd/cr), add diesel costs, and plot EV TCO premium
-	evaluate_diesel_on_all_drivecycles(
-		datasets=datasets,
-		optimized_params=optimized_params,
-		results_dir=plots_dir,
-		param_suffix=param_suffix,
-	)
-	add_costs_diesel_all_drivecycles(
+	# # Evaluate diesel model on all drivecycles (using EV-optimized cd/cr), add diesel costs, and plot EV TCO premium
+	# evaluate_diesel_on_all_drivecycles(
+	# 	datasets=datasets,
+	# 	optimized_params=optimized_params,
+	# 	results_dir=plots_dir,
+	# 	param_suffix=param_suffix,
+	# )
+	# add_costs_diesel_all_drivecycles(
+	# 	datasets=datasets,
+	# 	plots_dir=plots_dir,
+	# 	param_suffix=param_suffix,
+	# 	average_vmt=average_vmt,
+	# )
+	# plot_tco_premium_all_drivecycles(
+	# 	datasets=datasets,
+	# 	plots_dir=plots_dir,
+	# 	param_suffix=param_suffix,
+	# )
+	
+	# Generate detailed cost and emissions breakdown
+	generate_cost_emissions_breakdown(
 		datasets=datasets,
 		plots_dir=plots_dir,
+		optimized_params=optimized_params,
 		param_suffix=param_suffix,
 		average_vmt=average_vmt,
 	)
-	plot_tco_premium_all_drivecycles(
-		datasets=datasets,
-		plots_dir=plots_dir,
-		param_suffix=param_suffix,
-	)
+
+
+def generate_cost_emissions_breakdown(
+	datasets,
+	plots_dir,
+	optimized_params,
+	param_suffix="_optimized",
+	average_vmt=100000,
+):
+	"""
+	Generate a detailed side-by-side cost and emissions breakdown for EV vs Diesel trucks.
+	
+	Uses pre-computed cost values from the result CSVs to avoid double-counting.
+	Breaks down costs into:
+	- Capital costs (base truck, battery/fuel tank)
+	- Operating costs (electricity/fuel, labor, maintenance, insurance, tolls, permits)
+	- Emissions
+	
+	Creates detailed tables and visualizations comparing all components.
+	"""
+	
+	breakdown_dir = plots_dir / f"cost_emissions_breakdown{param_suffix}"
+	breakdown_dir.mkdir(parents=True, exist_ok=True)
+	
+	print("\n" + "="*80)
+	print("COST & EMISSIONS BREAKDOWN: EV vs Diesel")
+	print("="*80)
+	
+	breakdown_data = []
+	
+	for dataset in datasets:
+		truck_name = dataset["name"]
+		print(f"\n{'='*80}")
+		print(f"Analyzing: {truck_name}")
+		print(f"{'='*80}")
+		
+		# Load EV results CSV (pre-computed costs)
+		ev_results_path = plots_dir / f"{truck_name}_all_drivecycles_results{param_suffix}.csv"
+		if not ev_results_path.exists():
+			print(f"Warning: EV results not found at {ev_results_path}")
+			continue
+		
+		# Load diesel results CSV (pre-computed costs)
+		diesel_results_path = plots_dir / f"{truck_name}_all_drivecycles_diesel_results{param_suffix}.csv"
+		if not diesel_results_path.exists():
+			print(f"Warning: Diesel results not found at {diesel_results_path}")
+			continue
+		
+		# Load the CSVs
+		ev_df = pd.read_csv(ev_results_path)
+		diesel_df = pd.read_csv(diesel_results_path)
+		
+		# Extract average values from pre-computed cost columns
+		# EV costs are in columns like 'cost_Total capital ($/mi)', 'cost_Total electricity ($/mi)', etc.
+		ev_capital_per_mi = ev_df['cost_Total capital ($/mi)'].mean()
+		ev_operating_per_mi = ev_df['cost_Total operating ($/mi)'].mean()
+		ev_electricity_per_mi = ev_df['cost_Total electricity ($/mi)'].mean()
+		ev_labor_per_mi = ev_df['cost_Total labor ($/mi)'].mean()
+		ev_other_opex_per_mi = ev_df['cost_Other OPEXs ($/mi)'].mean()
+		
+		# Diesel costs are in columns like 'diesel_cost_Total capital ($/mi)', 'diesel_cost_Total fuel ($/mi)', etc.
+		diesel_capital_per_mi = diesel_df['diesel_cost_Total capital ($/mi)'].mean()
+		diesel_operating_per_mi = diesel_df['diesel_cost_Total operating ($/mi)'].mean()
+		diesel_fuel_per_mi = diesel_df['diesel_cost_Total fuel ($/mi)'].mean()
+		diesel_labor_per_mi = diesel_df['diesel_cost_Total labor ($/mi)'].mean()
+		diesel_other_opex_per_mi = diesel_df['diesel_cost_Other OPEXs ($/mi)'].mean()
+		
+		# Calculate detailed breakdowns
+		# Load parameters to get detailed cost components
+		ev_params = data_collection_tools_messy.read_parameters(
+			truck_params=dataset["truck_params"],
+			vmt_params="daycab_vmt_vius_2021",
+			run="messy_middle",
+			truck_type="EV",
+		)
+		ev_params = apply_optimized_parameters(ev_params, optimized_params, truck_name)
+		
+		# Get truck cost data for detailed breakdown
+		ev_truck_cost_data = data_collection_tools_messy.read_truck_cost_data(
+			truck_type='EV',
+			chemistry=ev_params.battery_chemistry,
+		)
+		diesel_truck_cost_data = data_collection_tools_messy.read_truck_cost_data(truck_type='diesel')
+		
+		# Get battery and charging info
+		e_bat_baseline = battery_caps.loc['Mean', dataset["battery_col"]]
+		max_charging_power_data = pd.read_csv(str(BASE_DIR / "messy_middle_results" / "max_charging_powers.csv"), index_col="truck_name")
+		max_charging_power = max_charging_power_data.loc[truck_name, "99th_percentile_charging_power_kw"]
+		
+		# Load US average values for electricity breakdown
+		usa_data = pd.read_csv(str(BASE_DIR / "data_messy" / "energy_costs_emissions_usa.csv")).set_index("Parameter")
+		electricity_cost_baseline = usa_data.loc["Commercial electricity ($/kWh)", "Value"]
+		demand_charge_baseline = usa_data.loc["Demand charge ($/kW)", "Value"]
+		
+		# Get average fuel economy from results
+		ev_fuel_kwh_per_mi_avg = ev_df['model_fuel'].mean() if 'model_fuel' in ev_df.columns else 1.85
+		
+		# Calculate electricity cost breakdown by year
+		from costing_and_emissions_tools_messy import get_electricity_cost_by_year
+		electricity_unit_by_year = get_electricity_cost_by_year(
+			ev_params,
+			ev_fuel_kwh_per_mi_avg,
+			demand_charge_baseline,
+			electricity_cost_baseline,
+			max_charging_power,
+		)
+		
+		# Break down electricity costs proportionally
+		# The electricity_unit_by_year contains normalized costs ($/kWh)
+		# We use the pre-computed total and break it down by component proportions
+		total_normalized = np.mean(electricity_unit_by_year['Total'])
+		
+		# Calculate proportions of each component
+		energy_proportion = np.mean(electricity_unit_by_year['Normalized energy charge']) / total_normalized
+		demand_proportion = np.mean(electricity_unit_by_year['Normalized demand charge']) / total_normalized
+		capital_proportion = np.mean(electricity_unit_by_year['Normalized capital']) / total_normalized
+		fixed_proportion = np.mean(electricity_unit_by_year['Normalized fixed']) / total_normalized
+		
+		# Apply proportions to pre-computed total electricity cost
+		electricity_energy_charge = ev_electricity_per_mi * energy_proportion
+		electricity_demand_charge = ev_electricity_per_mi * demand_proportion
+		electricity_charger_capital = ev_electricity_per_mi * capital_proportion
+		electricity_charger_fixed = ev_electricity_per_mi * fixed_proportion
+		
+		# Battery cost breakdown (initial + replacements)
+		battery_unit_cost = ev_truck_cost_data['Battery Unit Cost ($/kWh)']
+		battery_kwh = e_bat_baseline
+		
+		# Initial battery (purchased upfront, year 0)
+		battery_initial_cost = battery_unit_cost * battery_kwh
+		
+		# Calculate replacements based on degradation
+		lifetime_miles = ev_params.VMT['VMT (miles)'].sum()
+		ev_fuel_kwh_per_mi_avg = ev_df['model_fuel'].mean() if 'model_fuel' in ev_df.columns else 1.85
+		
+		# Get discount factor for each year
+		discountfactor = 1 / np.power(1 + ev_params.discountrate, np.arange(10))
+		
+		# Calculate replacement batteries needed
+		battery_replacements = calculate_replacements(
+			ev_params.VMT['VMT (miles)'],
+			ev_fuel_kwh_per_mi_avg,
+			e_bat=battery_kwh,
+		)
+		
+		# Replacement cost occurs mid-life with discounting
+		# Typically at year 5 (middle of 10-year period)
+		replacement_discount_factor = discountfactor[5] if battery_replacements > 0 else 0
+		battery_replacement_cost = battery_unit_cost * battery_kwh * battery_replacements * replacement_discount_factor
+		
+		# Convert to per-mile costs
+		ev_battery_initial_per_mi = battery_initial_cost / lifetime_miles
+		ev_battery_replacement_per_mi = battery_replacement_cost / lifetime_miles
+		ev_battery_cost_per_mi = ev_battery_initial_per_mi + ev_battery_replacement_per_mi
+		
+		# EV component costs
+		ev_glider = ev_truck_cost_data['Capital Costs']['glider ($)']
+		ev_motor_inverter = ev_truck_cost_data['Capital Costs']['motor and inverter ($/kW)'] * max_charging_power
+		ev_dcdc = ev_truck_cost_data['Capital Costs']['DC-DC converter ($/kW)'] * max_charging_power
+		
+		# Diesel component costs
+		diesel_glider = diesel_truck_cost_data['Capital Costs']['glider ($)']
+		diesel_engine = diesel_truck_cost_data['Capital Costs']['engine ($/kW)'] * max_charging_power  # Approx power
+		diesel_trans = diesel_truck_cost_data['Capital Costs']['transmission ($)']
+		diesel_aftertx = diesel_truck_cost_data['Capital Costs']['aftertreatment ($)']
+		diesel_tank = diesel_truck_cost_data['Capital Costs']['fuel tank ($)']
+		
+		# Convert to per-mile costs
+		ev_glider_per_mi = ev_glider / lifetime_miles
+		ev_motor_inverter_per_mi = ev_motor_inverter / lifetime_miles
+		ev_dcdc_per_mi = ev_dcdc / lifetime_miles
+		
+		diesel_glider_per_mi = diesel_glider / lifetime_miles
+		diesel_engine_per_mi = diesel_engine / lifetime_miles
+		diesel_trans_per_mi = diesel_trans / lifetime_miles
+		diesel_aftertx_per_mi = diesel_aftertx / lifetime_miles
+		diesel_tank_per_mi = diesel_tank / lifetime_miles
+		
+		# Break down Other OPEXs proportionally based on truck cost data
+		# Get nominal rates from cost data
+		ev_maint_nominal = ev_truck_cost_data['Operating Costs'].get('maintenance & repair ($/mi)', 0)
+		ev_insurance_nominal = ev_truck_cost_data['Operating Costs'].get('insurance ($/mi)', 0) * ev_capital_per_mi
+		ev_tolls_nominal = ev_truck_cost_data['Operating Costs'].get('tolls ($/mi)', 0)
+		ev_permits_nominal = ev_truck_cost_data['Operating Costs'].get('permits and licenses ($/mi)', 0)
+		ev_misc_nominal = ev_truck_cost_data['Operating Costs'].get('misc ($/mi)', 0)
+		ev_total_nominal = ev_maint_nominal + ev_insurance_nominal + ev_tolls_nominal + ev_permits_nominal + ev_misc_nominal
+		
+		# Apply proportionally to match pre-computed total
+		if ev_total_nominal > 0:
+			ev_maintenance_per_mi = (ev_maint_nominal / ev_total_nominal) * ev_other_opex_per_mi
+			ev_insurance_per_mi = (ev_insurance_nominal / ev_total_nominal) * ev_other_opex_per_mi
+			ev_tolls_per_mi = (ev_tolls_nominal / ev_total_nominal) * ev_other_opex_per_mi
+			ev_permits_per_mi = (ev_permits_nominal / ev_total_nominal) * ev_other_opex_per_mi
+			ev_misc_per_mi = (ev_misc_nominal / ev_total_nominal) * ev_other_opex_per_mi
+		else:
+			ev_maintenance_per_mi = ev_insurance_per_mi = ev_tolls_per_mi = ev_permits_per_mi = ev_misc_per_mi = 0
+		
+		# Same for diesel
+		diesel_maint_nominal = diesel_truck_cost_data['Operating Costs'].get('maintenance & repair ($/mi)', 0)
+		diesel_insurance_nominal = diesel_truck_cost_data['Operating Costs'].get('insurance ($/mi-$)', 0) * diesel_capital_per_mi
+		diesel_tolls_nominal = diesel_truck_cost_data['Operating Costs'].get('tolls ($/mi)', 0)
+		diesel_permits_nominal = diesel_truck_cost_data['Operating Costs'].get('permits and licenses ($/mi)', 0)
+		diesel_total_nominal = diesel_maint_nominal + diesel_insurance_nominal + diesel_tolls_nominal + diesel_permits_nominal
+		
+		if diesel_total_nominal > 0:
+			diesel_maintenance_per_mi = (diesel_maint_nominal / diesel_total_nominal) * diesel_other_opex_per_mi
+			diesel_insurance_per_mi = (diesel_insurance_nominal / diesel_total_nominal) * diesel_other_opex_per_mi
+			diesel_tolls_per_mi = (diesel_tolls_nominal / diesel_total_nominal) * diesel_other_opex_per_mi
+			diesel_permits_per_mi = (diesel_permits_nominal / diesel_total_nominal) * diesel_other_opex_per_mi
+		else:
+			diesel_maintenance_per_mi = diesel_insurance_per_mi = diesel_tolls_per_mi = diesel_permits_per_mi = 0
+		
+		# Create detailed breakdown table with component-level detail
+		breakdown_df = pd.DataFrame({
+			'Component': [
+				'CAPITAL COSTS',
+				'  Chassis (Glider)',
+				'  Powertrain',
+				'    Motor & Inverter',
+				'    DC-DC Converter',
+				'    Engine',
+				'    Transmission',
+				'    Aftertreatment',
+				'    Fuel Tank',
+				'  Battery',
+				'    Initial Battery',
+				'    Replacement Batteries',
+				'Total Capital',
+				'',
+				'OPERATING COSTS',
+				'  Energy/Fuel',
+				'    Energy Charge',
+				'    Demand Charge',
+				'    Charger Capital',
+				'    Charger Fixed Costs',
+				'  Labor',
+				'  Maintenance & Repair',
+				'  Insurance',
+				'  Tolls',
+				'  Permits & Licenses',
+				'  Misc',
+				'Total Operating',
+				'',
+				'TOTAL TCO',
+			],
+			'EV ($/mi)': [
+				'',  # Section header
+				ev_glider_per_mi,
+				'',  # Powertrain header
+				ev_motor_inverter_per_mi,
+				ev_dcdc_per_mi,
+				0.0,  # No engine
+				0.0,  # No transmission
+				0.0,  # No aftertreatment
+				0.0,  # No fuel tank
+				'',  # Battery header
+				ev_battery_initial_per_mi,
+				ev_battery_replacement_per_mi,
+				ev_capital_per_mi,
+				'',  # Spacer
+				'',  # Section header
+				ev_electricity_per_mi,
+				electricity_energy_charge,
+				electricity_demand_charge,
+				electricity_charger_capital,
+				electricity_charger_fixed,
+				ev_labor_per_mi,
+				ev_maintenance_per_mi,
+				ev_insurance_per_mi,
+				ev_tolls_per_mi,
+				ev_permits_per_mi,
+				ev_misc_per_mi,
+				ev_operating_per_mi,
+				'',  # Spacer
+				ev_capital_per_mi + ev_operating_per_mi,
+			],
+			'Diesel ($/mi)': [
+				'',  # Section header
+				diesel_glider_per_mi,
+				'',  # Powertrain header
+				0.0,  # No motor/inverter
+				0.0,  # No DC-DC
+				diesel_engine_per_mi,
+				diesel_trans_per_mi,
+				diesel_aftertx_per_mi,
+				diesel_tank_per_mi,
+				'',  # No battery
+				0.0,  # No initial battery
+				0.0,  # No replacement batteries
+				diesel_capital_per_mi,
+				'',  # Spacer
+				'',  # Section header
+				diesel_fuel_per_mi,
+				diesel_fuel_per_mi,  # All fuel is energy charge
+				0.0,  # No demand charge
+				0.0,  # No charger capital
+				0.0,  # No charger fixed costs
+				diesel_labor_per_mi,
+				diesel_maintenance_per_mi,
+				diesel_insurance_per_mi,
+				diesel_tolls_per_mi,
+				diesel_permits_per_mi,
+				0.0,  # No misc for diesel
+				diesel_operating_per_mi,
+				'',  # Spacer
+				diesel_capital_per_mi + diesel_operating_per_mi,
+			],
+		})
+		
+		# Calculate differences (only for numeric rows)
+		breakdown_df['EV - Diesel ($/mi)'] = pd.to_numeric(breakdown_df['EV ($/mi)'], errors='coerce') - pd.to_numeric(breakdown_df['Diesel ($/mi)'], errors='coerce')
+		breakdown_df['% Difference'] = (breakdown_df['EV - Diesel ($/mi)'] / pd.to_numeric(breakdown_df['Diesel ($/mi)'], errors='coerce')) * 100
+		
+		# Save to CSV
+		csv_path = breakdown_dir / f"{truck_name}_cost_breakdown.csv"
+		breakdown_df.to_csv(csv_path, index=False)
+		print(f"\nSaved cost breakdown: {csv_path}")
+		print(breakdown_df.to_string())
+		
+		breakdown_data.append({
+			'truck_name': truck_name,
+			'df': breakdown_df,
+		})
+		
+		# ===== CREATE VISUALIZATION =====
+		fig, axes = plt.subplots(2, 3, figsize=(20, 12))
+		
+		# Extract component values for plotting
+		def get_value(component_name):
+			return pd.to_numeric(breakdown_df[breakdown_df['Component'] == component_name]['EV ($/mi)'].values[0], errors='coerce')
+		
+		def get_diesel_value(component_name):
+			return pd.to_numeric(breakdown_df[breakdown_df['Component'] == component_name]['Diesel ($/mi)'].values[0], errors='coerce')
+		
+		# Plot 1: Overall Capital vs Operating Breakdown
+		ax1 = axes[0, 0]
+		x_pos = [0, 1]
+		widths = [0.6, 0.6]
+		
+		ev_capital = get_value('Total Capital')
+		ev_operating = get_value('Total Operating')
+		diesel_capital = get_diesel_value('Total Capital')
+		diesel_operating = get_diesel_value('Total Operating')
+		
+		ax1.bar(x_pos[0], ev_capital, widths[0], label='Capital', color='#1f77b4', alpha=0.8)
+		ax1.bar(x_pos[0], ev_operating, widths[0], bottom=ev_capital, label='Operating', color='#ff7f0e', alpha=0.8)
+		
+		ax1.bar(x_pos[1], diesel_capital, widths[1], color='#1f77b4', alpha=0.8)
+		ax1.bar(x_pos[1], diesel_operating, widths[1], bottom=diesel_capital, color='#ff7f0e', alpha=0.8)
+		
+		ax1.set_ylabel('Cost ($/mi)', fontweight='bold', fontsize=11)
+		ax1.set_title(f'Total Cost Overview', fontweight='bold', fontsize=13)
+		ax1.set_xticks(x_pos)
+		ax1.set_xticklabels(['EV', 'Diesel'])
+		ax1.legend(fontsize=9)
+		ax1.grid(True, alpha=0.3, axis='y')
+		
+		ev_total = ev_capital + ev_operating
+		diesel_total = diesel_capital + diesel_operating
+		ax1.text(x_pos[0], ev_total + 0.05, f'${ev_total:.2f}/mi', ha='center', va='bottom', fontweight='bold', fontsize=10)
+		ax1.text(x_pos[1], diesel_total + 0.05, f'${diesel_total:.2f}/mi', ha='center', va='bottom', fontweight='bold', fontsize=10)
+		
+		# Plot 2: Capital Cost Breakdown with Powertrain Details
+		ax2 = axes[0, 1]
+		
+		# EV components
+		ev_chassis = get_value('  Chassis (Glider)')
+		ev_motor = get_value('    Motor & Inverter')
+		ev_dcdc = get_value('    DC-DC Converter')
+		ev_battery = get_value('  Battery')
+		
+		# Diesel components
+		diesel_chassis = get_diesel_value('  Chassis (Glider)')
+		diesel_engine = get_diesel_value('    Engine')
+		diesel_trans = get_diesel_value('    Transmission')
+		diesel_aftertx = get_diesel_value('    Aftertreatment')
+		diesel_tank = get_diesel_value('    Fuel Tank')
+		
+		# Stack EV components
+		ev_bottom = ev_chassis
+		ax2.bar(x_pos[0], ev_chassis, widths[0], label='Chassis', color='#8c564b', alpha=0.8)
+		ax2.bar(x_pos[0], ev_motor, widths[0], bottom=ev_bottom, label='Motor & Inverter', color='#e377c2', alpha=0.8)
+		ev_bottom += ev_motor
+		ax2.bar(x_pos[0], ev_dcdc, widths[0], bottom=ev_bottom, label='DC-DC Converter', color='#7f7f7f', alpha=0.8)
+		ev_bottom += ev_dcdc
+		ax2.bar(x_pos[0], ev_battery, widths[0], bottom=ev_bottom, label='Battery', color='#9467bd', alpha=0.8)
+		
+		# Stack Diesel components
+		diesel_bottom = diesel_chassis
+		ax2.bar(x_pos[1], diesel_chassis, widths[1], color='#8c564b', alpha=0.8)
+		ax2.bar(x_pos[1], diesel_engine, widths[1], bottom=diesel_bottom, label='Engine', color='#1f77b4', alpha=0.8)
+		diesel_bottom += diesel_engine
+		ax2.bar(x_pos[1], diesel_trans, widths[1], bottom=diesel_bottom, label='Transmission', color='#ff7f0e', alpha=0.8)
+		diesel_bottom += diesel_trans
+		ax2.bar(x_pos[1], diesel_aftertx, widths[1], bottom=diesel_bottom, label='Aftertreatment', color='#2ca02c', alpha=0.8)
+		diesel_bottom += diesel_aftertx
+		ax2.bar(x_pos[1], diesel_tank, widths[1], bottom=diesel_bottom, label='Fuel Tank', color='#d62728', alpha=0.8)
+		
+		ax2.set_ylabel('Cost ($/mi)', fontweight='bold', fontsize=11)
+		ax2.set_title('Capital Cost Breakdown (with Components)', fontweight='bold', fontsize=13)
+		ax2.set_xticks(x_pos)
+		ax2.set_xticklabels(['EV', 'Diesel'])
+		ax2.legend(fontsize=8, loc='upper left')
+		ax2.grid(True, alpha=0.3, axis='y')
+		ax2.text(x_pos[0], ev_capital + 0.01, f'${ev_capital:.2f}', ha='center', va='bottom', fontsize=9)
+		ax2.text(x_pos[1], diesel_capital + 0.01, f'${diesel_capital:.2f}', ha='center', va='bottom', fontsize=9)
+		
+		# Plot 3: Electricity/Fuel Cost Detailed Breakdown
+		ax3 = axes[0, 2]
+		ev_energy_charge = get_value('    Energy Charge')
+		ev_demand_charge = get_value('    Demand Charge')
+		ev_charger_capital = get_value('    Charger Capital')
+		ev_charger_fixed = get_value('    Charger Fixed Costs')
+		diesel_fuel = get_diesel_value('    Energy Charge')
+		
+		# EV electricity breakdown
+		ax3.bar(x_pos[0], ev_energy_charge, widths[0], label='Energy Charge', color='#8c564b', alpha=0.8)
+		ax3.bar(x_pos[0], ev_demand_charge, widths[0], bottom=ev_energy_charge, label='Demand Charge', color='#e377c2', alpha=0.8)
+		ax3.bar(x_pos[0], ev_charger_capital, widths[0], bottom=ev_energy_charge+ev_demand_charge, label='Charger Capital', color='#7f7f7f', alpha=0.8)
+		ax3.bar(x_pos[0], ev_charger_fixed, widths[0], bottom=ev_energy_charge+ev_demand_charge+ev_charger_capital, label='Charger Fixed', color='#bcbd22', alpha=0.8)
+		
+		# Diesel fuel
+		ax3.bar(x_pos[1], diesel_fuel, widths[1], label='Diesel Fuel', color='#17becf', alpha=0.8)
+		
+		ax3.set_ylabel('Cost ($/mi)', fontweight='bold', fontsize=11)
+		ax3.set_title('Energy/Fuel Cost Breakdown', fontweight='bold', fontsize=13)
+		ax3.set_xticks(x_pos)
+		ax3.set_xticklabels(['EV', 'Diesel'])
+		ax3.legend(fontsize=8, loc='upper left')
+		ax3.grid(True, alpha=0.3, axis='y')
+		
+		ev_elec_total = ev_energy_charge + ev_demand_charge + ev_charger_capital + ev_charger_fixed
+		ax3.text(x_pos[0], ev_elec_total + 0.02, f'${ev_elec_total:.2f}', ha='center', va='bottom', fontsize=9)
+		ax3.text(x_pos[1], diesel_fuel + 0.02, f'${diesel_fuel:.2f}', ha='center', va='bottom', fontsize=9)
+		
+		# Plot 4: Other Operating Costs Breakdown
+		ax4 = axes[1, 0]
+		other_components = ['  Labor', '  Maintenance & Repair', '  Insurance', '  Tolls', '  Permits & Licenses']
+		ev_other_vals = [get_value(c) for c in other_components]
+		diesel_other_vals = [get_diesel_value(c) for c in other_components]
+		
+		x_pos_other = np.arange(len(other_components))
+		width = 0.35
+		
+		ax4.bar(x_pos_other - width/2, ev_other_vals, width, label='EV', color='#2ca02c', alpha=0.8)
+		ax4.bar(x_pos_other + width/2, diesel_other_vals, width, label='Diesel', color='#d62728', alpha=0.8)
+		
+		ax4.set_ylabel('Cost ($/mi)', fontweight='bold', fontsize=11)
+		ax4.set_title('Other Operating Costs', fontweight='bold', fontsize=13)
+		ax4.set_xticks(x_pos_other)
+		component_labels = [c.strip() for c in other_components]
+		ax4.set_xticklabels(component_labels, rotation=45, ha='right', fontsize=9)
+		ax4.legend(fontsize=9)
+		ax4.grid(True, alpha=0.3, axis='y')
+		
+		# Plot 5: EV Electricity Components Pie Chart
+		ax5 = axes[1, 1]
+		elec_components = ['Energy\nCharge', 'Demand\nCharge', 'Charger\nCapital', 'Charger\nFixed']
+		elec_values = [ev_energy_charge, ev_demand_charge, ev_charger_capital, ev_charger_fixed]
+		colors_pie = ['#8c564b', '#e377c2', '#7f7f7f', '#bcbd22']
+		
+		# Create pie chart with percentages
+		wedges, texts, autotexts = ax5.pie(elec_values, labels=elec_components, colors=colors_pie, 
+										   autopct='%1.1f%%', startangle=90, textprops={'fontsize': 9})
+		for autotext in autotexts:
+			autotext.set_color('white')
+			autotext.set_fontweight('bold')
+		
+		ax5.set_title(f'EV Electricity Cost\nComponents (${ev_elec_total:.2f}/mi)', fontweight='bold', fontsize=13)
+		
+		# Plot 6: All Operating Cost Components Stacked
+		ax6 = axes[1, 2]
+		
+		# Stack all operating components
+		ev_elec = get_value('  Energy/Fuel')
+		ev_labor = get_value('  Labor')
+		ev_maint = get_value('  Maintenance & Repair')
+		ev_insurance = get_value('  Insurance')
+		ev_tolls = get_value('  Tolls')
+		ev_permits = get_value('  Permits & Licenses')
+		
+		diesel_fuel = get_diesel_value('  Energy/Fuel')
+		diesel_labor = get_diesel_value('  Labor')
+		diesel_maint = get_diesel_value('  Maintenance & Repair')
+		diesel_insurance = get_diesel_value('  Insurance')
+		diesel_tolls = get_diesel_value('  Tolls')
+		diesel_permits = get_diesel_value('  Permits & Licenses')
+		
+		# Stacked bars
+		ax6.bar(x_pos[0], ev_elec, widths[0], label='Energy/Fuel', color='#1f77b4', alpha=0.8)
+		ax6.bar(x_pos[0], ev_labor, widths[0], bottom=ev_elec, label='Labor', color='#ff7f0e', alpha=0.8)
+		ax6.bar(x_pos[0], ev_maint, widths[0], bottom=ev_elec+ev_labor, label='Maintenance', color='#2ca02c', alpha=0.8)
+		ax6.bar(x_pos[0], ev_tolls+ev_permits+ev_insurance, widths[0], bottom=ev_elec+ev_labor+ev_maint, label='Other', color='#d62728', alpha=0.8)
+		
+		ax6.bar(x_pos[1], diesel_fuel, widths[1], color='#1f77b4', alpha=0.8)
+		ax6.bar(x_pos[1], diesel_labor, widths[1], bottom=diesel_fuel, color='#ff7f0e', alpha=0.8)
+		ax6.bar(x_pos[1], diesel_maint, widths[1], bottom=diesel_fuel+diesel_labor, color='#2ca02c', alpha=0.8)
+		ax6.bar(x_pos[1], diesel_tolls+diesel_permits+diesel_insurance, widths[1], bottom=diesel_fuel+diesel_labor+diesel_maint, color='#d62728', alpha=0.8)
+		
+		ax6.set_ylabel('Cost ($/mi)', fontweight='bold', fontsize=11)
+		ax6.set_title('Operating Costs Stacked', fontweight='bold', fontsize=13)
+		ax6.set_xticks(x_pos)
+		ax6.set_xticklabels(['EV', 'Diesel'])
+		ax6.legend(fontsize=9)
+		ax6.grid(True, alpha=0.3, axis='y')
+		ax6.text(x_pos[0], ev_operating + 0.05, f'${ev_operating:.2f}', ha='center', va='bottom', fontsize=9)
+		ax6.text(x_pos[1], diesel_operating + 0.05, f'${diesel_operating:.2f}', ha='center', va='bottom', fontsize=9)
+		
+		# Add overall title
+		fig.suptitle(f'{truck_name} - Detailed Cost Breakdown Analysis', fontsize=16, fontweight='bold', y=0.995)
+		
+		plt.tight_layout()
+		plot_path = breakdown_dir / f"{truck_name}_cost_breakdown{param_suffix}.png"
+		plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+		print(f"Saved cost breakdown plot: {plot_path}")
+		plt.close(fig)
+	
+	print("\n" + "="*80)
+	print("COST & EMISSIONS BREAKDOWN COMPLETE")
+	print("="*80)
+
 
 if __name__ == "__main__":
 	main()

@@ -19,10 +19,13 @@ import costing_tools_diesel
 import emissions_tools
 import data_collection_tools_messy
 from datetime import datetime
+from pathlib import Path
 
 MONTHS_PER_YEAR = 12
 KG_PER_TON = 1000
 KG_PER_LB = 0.453592
+
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 """
 Function: Calculate the battery mass associated with a given truck design range
@@ -33,7 +36,13 @@ Inputs:
     - f_bat_cap (string): Path to a csv file containing best-fit battery capacity of each Tesla Semi in the 2023 PepsiCo pilot
     - battery_chemistry (string): Battery chemistry (either NMC or LFP)
 """
-def get_ebat_from_range(range, payload, f_linear_params='tables/payload_vs_mileage_best_fit_params.csv', f_bat_cap='data/pepsi_semi_battery_capacities.csv', battery_chemistry='NMC'):
+def get_ebat_from_range(range, payload, f_linear_params=None, f_bat_cap=None, battery_chemistry='NMC'):
+
+    # Use BASE_DIR for default paths
+    if f_linear_params is None:
+        f_linear_params = str(BASE_DIR / "tables" / "payload_vs_mileage_best_fit_params.csv")
+    if f_bat_cap is None:
+        f_bat_cap = str(BASE_DIR / "data" / "pepsi_semi_battery_capacities.csv")
 
     # Get linear parameters
     payload_vs_mileage_params_df = pd.read_csv(f_linear_params)
@@ -114,9 +123,13 @@ Inputs:
     - charging_power (float): Average charging power (kW)
     - charging_efficiency (float): Efficiency of charging the battery (relative to energy from the power source)
 """
-def calculate_electricity_unit(VMT, mileage, demand_charge, electricity_charge, charging_power, lifetime_energy_demand, charging_efficiency=0.92, charger_cost_filename='data/charger_cost_data.csv', charger_cost_scenario='Baseline'):
+def calculate_electricity_unit(VMT, mileage, demand_charge, electricity_charge, charging_power, lifetime_energy_demand, charging_efficiency=0.92, charger_cost_filename=None, charger_cost_scenario='Baseline'):
     lifetime = 15       # Lifetime of the capital assets
     discount_rate = 7        # Discount rate (%)
+    
+    # Use BASE_DIR if filename not provided
+    if charger_cost_filename is None:
+        charger_cost_filename = str(BASE_DIR / "data" / "charger_cost_data.csv")
     
     # Read in the charger cost info
     installation_cost, hardware_cost, fixed_monthly_cost = read_charger_cost_info(charger_cost_filename, charger_cost_scenario)
