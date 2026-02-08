@@ -39,7 +39,7 @@ def read_battery_params(battery_params='default', chemistry='NMC'):
     return battery_params_dict
     
 def read_truck_cost_data(truck = 'class_8_daycab', truck_type = 'EV', chemistry='NMC'):
-    df_truck_cost = pd.read_csv(f'data/{truck}_cost_data.csv', index_col=0)
+    df_truck_cost = pd.read_csv(f'data_messy/{truck}_cost_data.csv', index_col=0)
     
     truck_cost_data_dict = {}
     
