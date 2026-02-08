@@ -1424,6 +1424,15 @@ def main():
 		param_suffix=param_suffix,
 		average_vmt=average_vmt,
 	)
+	
+	# Generate presentation-style step-by-step visuals
+	generate_presentation_visuals(
+		datasets=datasets,
+		plots_dir=plots_dir,
+		optimized_params=optimized_params,
+		param_suffix=param_suffix,
+		average_vmt=average_vmt,
+	)
 
 
 def generate_cost_emissions_breakdown(
@@ -1605,7 +1614,7 @@ def generate_cost_emissions_breakdown(
 		# Break down Other OPEXs proportionally based on truck cost data
 		# Get nominal rates from cost data
 		ev_maint_nominal = ev_truck_cost_data['Operating Costs'].get('maintenance & repair ($/mi)', 0)
-		ev_insurance_nominal = ev_truck_cost_data['Operating Costs'].get('insurance ($/mi)', 0) * ev_capital_per_mi
+		ev_insurance_nominal = ev_truck_cost_data['Operating Costs'].get('insurance ($/mi-$)', 0) * ev_capital_per_mi
 		ev_tolls_nominal = ev_truck_cost_data['Operating Costs'].get('tolls ($/mi)', 0)
 		ev_permits_nominal = ev_truck_cost_data['Operating Costs'].get('permits and licenses ($/mi)', 0)
 		ev_misc_nominal = ev_truck_cost_data['Operating Costs'].get('misc ($/mi)', 0)
@@ -1793,7 +1802,9 @@ def generate_cost_emissions_breakdown(
 		ev_chassis = get_value('  Chassis (Glider)')
 		ev_motor = get_value('    Motor & Inverter')
 		ev_dcdc = get_value('    DC-DC Converter')
-		ev_battery = get_value('  Battery')
+		ev_battery_initial = get_value('    Initial Battery')
+		ev_battery_replacement = get_value('    Replacement Batteries')
+		ev_battery = ev_battery_initial + ev_battery_replacement if ev_battery_initial is not None else 0
 		
 		# Diesel components
 		diesel_chassis = get_diesel_value('  Chassis (Glider)')
@@ -1944,6 +1955,300 @@ def generate_cost_emissions_breakdown(
 	print("\n" + "="*80)
 	print("COST & EMISSIONS BREAKDOWN COMPLETE")
 	print("="*80)
+
+
+def generate_presentation_visuals(
+	datasets,
+	plots_dir,
+	optimized_params,
+	param_suffix="_optimized",
+	average_vmt=100000,
+):
+	"""
+	Generate step-by-step presentation visualizations that build up the analysis.
+	
+	Creates 6 separate plots for each truck:
+	1. Capital costs only
+	2. Capital + Operating costs
+	3. Capital cost breakdown (with components)
+	4. Other Operating Costs breakdown
+	5. Operating costs stacked with only energy/fuel
+	6. Operating costs stacked with all components
+	
+	All plots keep consistent colors and y-axis ranges from the summary visualization,
+	but exclude titles, legends, and text overlays for presentation use.
+	"""
+	
+	presentation_dir = plots_dir / f"presentation_visuals{param_suffix}"
+	presentation_dir.mkdir(parents=True, exist_ok=True)
+	
+	print("\n" + "="*80)
+	print("GENERATING PRESENTATION VISUALS")
+	print("="*80)
+	
+	breakdown_dir = plots_dir / f"cost_emissions_breakdown{param_suffix}"
+	
+	for dataset in datasets:
+		truck_name = dataset["name"]
+		print(f"\nGenerating presentation visuals for: {truck_name}")
+		
+		# Load the breakdown CSV
+		csv_path = breakdown_dir / f"{truck_name}_cost_breakdown.csv"
+		if not csv_path.exists():
+			print(f"Warning: Breakdown CSV not found for {truck_name}, skipping.")
+			continue
+		
+		breakdown_df = pd.read_csv(csv_path)
+		
+		# Helper function to get values from breakdown_df
+		def get_value(component_name):
+			try:
+				return pd.to_numeric(breakdown_df[breakdown_df['Component'] == component_name]['EV ($/mi)'].values[0], errors='coerce')
+			except:
+				return 0
+		
+		def get_diesel_value(component_name):
+			try:
+				return pd.to_numeric(breakdown_df[breakdown_df['Component'] == component_name]['Diesel ($/mi)'].values[0], errors='coerce')
+			except:
+				return 0
+		
+		# Extract all values needed
+		ev_capital = get_value('Total Capital')
+		ev_operating = get_value('Total Operating')
+		diesel_capital = get_diesel_value('Total Capital')
+		diesel_operating = get_diesel_value('Total Operating')
+		
+		# Capital components
+		ev_chassis = get_value('  Chassis (Glider)')
+		ev_motor = get_value('    Motor & Inverter')
+		ev_dcdc = get_value('    DC-DC Converter')
+		ev_battery_initial = get_value('    Initial Battery')
+		ev_battery_replacement = get_value('    Replacement Batteries')
+		ev_battery = ev_battery_initial + ev_battery_replacement if ev_battery_initial is not None else 0
+		
+		diesel_chassis = get_diesel_value('  Chassis (Glider)')
+		diesel_engine = get_diesel_value('    Engine')
+		diesel_trans = get_diesel_value('    Transmission')
+		diesel_aftertx = get_diesel_value('    Aftertreatment')
+		diesel_tank = get_diesel_value('    Fuel Tank')
+		
+		# Operating components
+		ev_energy_fuel = get_value('  Energy/Fuel')
+		ev_labor = get_value('  Labor')
+		ev_maintenance = get_value('  Maintenance & Repair')
+		ev_insurance = get_value('  Insurance')
+		ev_tolls = get_value('  Tolls')
+		ev_permits = get_value('  Permits & Licenses')
+		ev_misc = get_value('  Misc')
+		
+		diesel_fuel = get_diesel_value('  Energy/Fuel')
+		diesel_labor = get_diesel_value('  Labor')
+		diesel_maintenance = get_diesel_value('  Maintenance & Repair')
+		diesel_insurance = get_diesel_value('  Insurance')
+		diesel_tolls = get_diesel_value('  Tolls')
+		diesel_permits = get_diesel_value('  Permits & Licenses')
+		
+		# Electricity/Fuel breakdown components
+		ev_energy_charge = get_value('    Energy Charge')
+		ev_demand_charge = get_value('    Demand Charge')
+		ev_charger_capital = get_value('    Charger Capital')
+		ev_charger_fixed = get_value('    Charger Fixed Costs')
+		diesel_energy_fuel_breakdown = get_diesel_value('    Energy Charge')
+		
+		# Calculate max y-axis value for consistency
+		ev_total = ev_capital + ev_operating
+		diesel_total = diesel_capital + diesel_operating
+		max_y = max(ev_total, diesel_total) * 1.15
+		
+		x_pos = [0, 1]
+		widths = [0.6, 0.6]
+		
+		# ========== PLOT 1: Capital costs only ==========
+		fig1, ax1 = plt.subplots(figsize=(8, 6))
+		
+		ax1.bar(x_pos[0], ev_capital, widths[0], color='#1f77b4', alpha=0.8)
+		ax1.bar(x_pos[1], diesel_capital, widths[1], color='#1f77b4', alpha=0.8)
+		
+		ax1.set_ylabel('Cost ($/mi)', fontweight='bold', fontsize=24)
+		ax1.set_xticks(x_pos)
+		ax1.set_xticklabels(['EV', 'Diesel'], fontsize=21)
+		ax1.tick_params(axis='y', labelsize=18)
+		ax1.set_ylim(0, max_y)
+		ax1.grid(True, alpha=0.3, axis='y')
+		
+		plt.tight_layout()
+		output_path = presentation_dir / f"{truck_name}_01_capital_only{param_suffix}.png"
+		fig1.savefig(output_path, dpi=300, bbox_inches="tight")
+		plt.close(fig1)
+		
+		# ========== PLOT 2: Capital + Operating costs ==========
+		fig2, ax2 = plt.subplots(figsize=(8, 6))
+		
+		ax2.bar(x_pos[0], ev_capital, widths[0], color='#1f77b4', alpha=0.8)
+		ax2.bar(x_pos[0], ev_operating, widths[0], bottom=ev_capital, color='#ff7f0e', alpha=0.8)
+		
+		ax2.bar(x_pos[1], diesel_capital, widths[1], color='#1f77b4', alpha=0.8)
+		ax2.bar(x_pos[1], diesel_operating, widths[1], bottom=diesel_capital, color='#ff7f0e', alpha=0.8)
+		
+		ax2.set_ylabel('Cost ($/mi)', fontweight='bold', fontsize=24)
+		ax2.set_xticks(x_pos)
+		ax2.set_xticklabels(['EV', 'Diesel'], fontsize=21)
+		ax2.tick_params(axis='y', labelsize=18)
+		ax2.set_ylim(0, max_y)
+		ax2.grid(True, alpha=0.3, axis='y')
+		
+		plt.tight_layout()
+		output_path = presentation_dir / f"{truck_name}_02_capital_and_operating{param_suffix}.png"
+		fig2.savefig(output_path, dpi=300, bbox_inches="tight")
+		plt.close(fig2)
+		
+		# ========== PLOT 3: Capital cost breakdown ==========
+		fig3, ax3 = plt.subplots(figsize=(8, 6))
+		
+		# Stack EV components
+		ev_bottom = ev_chassis
+		ax3.bar(x_pos[0], ev_chassis, widths[0], color='#8c564b', alpha=0.8)
+		ax3.bar(x_pos[0], ev_motor, widths[0], bottom=ev_bottom, color='#e377c2', alpha=0.8)
+		ev_bottom += ev_motor
+		ax3.bar(x_pos[0], ev_dcdc, widths[0], bottom=ev_bottom, color='#7f7f7f', alpha=0.8)
+		ev_bottom += ev_dcdc
+		ax3.bar(x_pos[0], ev_battery, widths[0], bottom=ev_bottom, color='#9467bd', alpha=0.8)
+		
+		# Stack Diesel components
+		diesel_bottom = diesel_chassis
+		ax3.bar(x_pos[1], diesel_chassis, widths[1], color='#8c564b', alpha=0.8)
+		ax3.bar(x_pos[1], diesel_engine, widths[1], bottom=diesel_bottom, color='#1f77b4', alpha=0.8)
+		diesel_bottom += diesel_engine
+		ax3.bar(x_pos[1], diesel_trans, widths[1], bottom=diesel_bottom, color='#ff7f0e', alpha=0.8)
+		diesel_bottom += diesel_trans
+		ax3.bar(x_pos[1], diesel_aftertx, widths[1], bottom=diesel_bottom, color='#2ca02c', alpha=0.8)
+		diesel_bottom += diesel_aftertx
+		ax3.bar(x_pos[1], diesel_tank, widths[1], bottom=diesel_bottom, color='#d62728', alpha=0.8)
+		
+		ax3.set_ylabel('Cost ($/mi)', fontweight='bold', fontsize=24)
+		ax3.set_xticks(x_pos)
+		ax3.set_xticklabels(['EV', 'Diesel'], fontsize=21)
+		ax3.tick_params(axis='y', labelsize=18)
+		# Use a tighter y-axis range for capital breakdown with buffer at top
+		max_capital_y = max(ev_capital, diesel_capital) * 1.25
+		ax3.set_ylim(0, max_capital_y)
+		ax3.grid(True, alpha=0.3, axis='y')
+		
+		plt.tight_layout()
+		output_path = presentation_dir / f"{truck_name}_03_capital_breakdown{param_suffix}.png"
+		fig3.savefig(output_path, dpi=300, bbox_inches="tight")
+		plt.close(fig3)
+		
+		# ========== PLOT 3b: Energy/Fuel Cost Breakdown ==========
+		fig3b, ax3b = plt.subplots(figsize=(8, 6))
+		
+		# EV electricity breakdown (stacked)
+		ax3b.bar(x_pos[0], ev_energy_charge, widths[0], color='#8c564b', alpha=0.8)
+		ax3b.bar(x_pos[0], ev_demand_charge, widths[0], bottom=ev_energy_charge, color='#e377c2', alpha=0.8)
+		ax3b.bar(x_pos[0], ev_charger_capital, widths[0], bottom=ev_energy_charge+ev_demand_charge, color='#7f7f7f', alpha=0.8)
+		ax3b.bar(x_pos[0], ev_charger_fixed, widths[0], bottom=ev_energy_charge+ev_demand_charge+ev_charger_capital, color='#bcbd22', alpha=0.8)
+		
+		# Diesel fuel
+		ax3b.bar(x_pos[1], diesel_energy_fuel_breakdown, widths[1], color='#17becf', alpha=0.8)
+		
+		ax3b.set_ylabel('Cost ($/mi)', fontweight='bold', fontsize=24)
+		ax3b.set_xticks(x_pos)
+		ax3b.set_xticklabels(['EV', 'Diesel'], fontsize=21)
+		ax3b.tick_params(axis='y', labelsize=18)
+		ax3b.grid(True, alpha=0.3, axis='y')
+		
+		plt.tight_layout()
+		output_path = presentation_dir / f"{truck_name}_03b_energy_fuel_breakdown{param_suffix}.png"
+		fig3b.savefig(output_path, dpi=300, bbox_inches="tight")
+		plt.close(fig3b)
+		
+		# ========== PLOT 4: Other Operating Costs ==========
+		fig4, ax4 = plt.subplots(figsize=(8, 6))
+		
+		other_components = ['  Labor', '  Maintenance & Repair', '  Insurance', '  Tolls', '  Permits & Licenses']
+		ev_other_vals = [get_value(c) for c in other_components]
+		diesel_other_vals = [get_diesel_value(c) for c in other_components]
+		
+		x_pos_other = np.arange(len(other_components))
+		width = 0.35
+		
+		ax4.bar(x_pos_other - width/2, ev_other_vals, width, color='#2ca02c', alpha=0.8)
+		ax4.bar(x_pos_other + width/2, diesel_other_vals, width, color='#d62728', alpha=0.8)
+		
+		ax4.set_ylabel('Cost ($/mi)', fontweight='bold', fontsize=24)
+		ax4.set_xticks(x_pos_other)
+		component_labels = [c.strip() for c in other_components]
+		ax4.set_xticklabels(component_labels, rotation=45, ha='right', fontsize=16)
+		ax4.tick_params(axis='y', labelsize=18)
+		ax4.grid(True, alpha=0.3, axis='y')
+		
+		plt.tight_layout()
+		output_path = presentation_dir / f"{truck_name}_04_other_operating{param_suffix}.png"
+		fig4.savefig(output_path, dpi=300, bbox_inches="tight")
+		plt.close(fig4)
+		
+		# ========== PLOT 5: Operating costs stacked with only energy/fuel ==========
+		fig5, ax5 = plt.subplots(figsize=(8, 6))
+		
+		# Calculate max operating cost for consistent y-axis
+		max_operating_y = max(ev_operating, diesel_operating) * 1.15
+		
+		ax5.bar(x_pos[0], ev_energy_fuel, widths[0], color='#1f77b4', alpha=0.8)
+		ax5.bar(x_pos[1], diesel_fuel, widths[1], color='#1f77b4', alpha=0.8)
+		
+		ax5.set_ylabel('Cost ($/mi)', fontweight='bold', fontsize=24)
+		ax5.set_xticks(x_pos)
+		ax5.set_xticklabels(['EV', 'Diesel'], fontsize=21)
+		ax5.tick_params(axis='y', labelsize=18)
+		ax5.set_ylim(0, max_operating_y)
+		ax5.grid(True, alpha=0.3, axis='y')
+		
+		plt.tight_layout()
+		output_path = presentation_dir / f"{truck_name}_05_operating_energy_only{param_suffix}.png"
+		fig5.savefig(output_path, dpi=300, bbox_inches="tight")
+		plt.close(fig5)
+		
+		# ========== PLOT 6: Operating costs stacked with all components ==========
+		fig6, ax6 = plt.subplots(figsize=(8, 6))
+		
+		# Aggregate other costs (Insurance + Tolls + Permits)
+		ev_other_costs = ev_insurance + ev_tolls + ev_permits
+		diesel_other_costs = diesel_insurance + diesel_tolls + diesel_permits
+		
+		# Stack EV operating components (Energy/Fuel + Labor + Maintenance + Other)
+		ev_op_bottom = ev_energy_fuel
+		ax6.bar(x_pos[0], ev_energy_fuel, widths[0], color='#1f77b4', alpha=0.8)
+		ax6.bar(x_pos[0], ev_labor, widths[0], bottom=ev_op_bottom, color='#ff7f0e', alpha=0.8)
+		ev_op_bottom += ev_labor
+		ax6.bar(x_pos[0], ev_maintenance, widths[0], bottom=ev_op_bottom, color='#2ca02c', alpha=0.8)
+		ev_op_bottom += ev_maintenance
+		ax6.bar(x_pos[0], ev_other_costs, widths[0], bottom=ev_op_bottom, color='#d62728', alpha=0.8)
+		
+		# Stack Diesel operating components (Fuel + Labor + Maintenance + Other)
+		diesel_op_bottom = diesel_fuel
+		ax6.bar(x_pos[1], diesel_fuel, widths[1], color='#1f77b4', alpha=0.8)
+		ax6.bar(x_pos[1], diesel_labor, widths[1], bottom=diesel_op_bottom, color='#ff7f0e', alpha=0.8)
+		diesel_op_bottom += diesel_labor
+		ax6.bar(x_pos[1], diesel_maintenance, widths[1], bottom=diesel_op_bottom, color='#2ca02c', alpha=0.8)
+		diesel_op_bottom += diesel_maintenance
+		ax6.bar(x_pos[1], diesel_other_costs, widths[1], bottom=diesel_op_bottom, color='#d62728', alpha=0.8)
+		
+		ax6.set_ylabel('Cost ($/mi)', fontweight='bold', fontsize=24)
+		ax6.set_xticks(x_pos)
+		ax6.set_xticklabels(['EV', 'Diesel'], fontsize=21)
+		ax6.tick_params(axis='y', labelsize=18)
+		ax6.set_ylim(0, max_operating_y)
+		ax6.grid(True, alpha=0.3, axis='y')
+		
+		plt.tight_layout()
+		output_path = presentation_dir / f"{truck_name}_06_operating_all_components{param_suffix}.png"
+		fig6.savefig(output_path, dpi=300, bbox_inches="tight")
+		plt.close(fig6)
+		
+		print(f"  ✓ Generated 7 presentation visuals for {truck_name}")
+	
+	print(f"\n✓ Presentation visuals saved to: {presentation_dir.absolute()}")
 
 
 if __name__ == "__main__":
