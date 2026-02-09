@@ -134,15 +134,24 @@ def apply_optimized_parameters(parameters, optimized_params, truck_name):
 	return optimized
 
 
-def plot_drivecycle_comparison(drivecycle_df, model_df, model_fuel_consumption, model_DoD, summary_path, driving_event):
-	"""Plot drivecycle signals and compare NACFE vs model metrics."""
+def plot_drivecycle_comparison(
+	drivecycle_df,
+	model_df_original,
+	model_fuel_original,
+	model_DoD_original,
+	model_df_calibrated,
+	model_fuel_calibrated,
+	model_DoD_calibrated,
+	summary_path,
+	driving_event,
+	truck_title,
+):
+	"""Plot drivecycle signals and compare NACFE vs original and calibrated model metrics."""
 	summary_df = pd.read_csv(summary_path, index_col="Driving event")
 	if driving_event not in summary_df.index:
 		raise KeyError(f"Driving event {driving_event} not found in {summary_path}")
 
 	nacfe_fuel_consumption = summary_df.loc[driving_event, "Fuel economy (kWh/mile)"]
-	nacfe_DoD_percent = summary_df.loc[driving_event, "Depth of Discharge (%)"]
-	
 	# Calculate standard error in the mean (SEM) for this driving event from instantaneous measurements
 	# SEM = std(instantaneous_fuel_economy) / sqrt(n)
 	# where n is the number of valid instantaneous measurements
@@ -152,14 +161,6 @@ def plot_drivecycle_comparison(drivecycle_df, model_df, model_fuel_consumption, 
 		nacfe_fuel_sem_pct = (nacfe_fuel_sem / nacfe_fuel_consumption * 100) if nacfe_fuel_consumption > 0 else 0
 	else:
 		nacfe_fuel_sem_pct = 0
-	
-	# For DoD: The SOC decreases monotonically during the drive, so its std doesn't represent measurement uncertainty.
-	# Instead, estimate uncertainty from the precision of SOC measurements (typically ±0.1-0.5% for BMS)
-	# Using ±0.5% as a conservative estimate for SOC measurement precision
-	# DoD uncertainty propagates from initial and final SOC: sqrt(σ_initial² + σ_final²)
-	soc_measurement_precision = 0.5  # percent
-	dod_uncertainty = np.sqrt(2) * soc_measurement_precision  # sqrt(2) because initial and final measurements
-	nacfe_DoD_sem_pct = (dod_uncertainty / nacfe_DoD_percent * 100) if nacfe_DoD_percent > 0 else 0
 
 	time_s = drivecycle_df["Time (s)"]
 	speed_mps = drivecycle_df["Vehicle speed (m/s)"]
@@ -168,13 +169,11 @@ def plot_drivecycle_comparison(drivecycle_df, model_df, model_fuel_consumption, 
 	delta_t_s = time_s.diff().replace(0, np.nan)
 	instantaneous_power_w = -((drivecycle_df["Delta Battery Energy (kWh)"] * 3.6e6) / delta_t_s)
 
-	model_DoD_percent = model_DoD * 100
-
-	fuel_pct_diff = (model_fuel_consumption - nacfe_fuel_consumption) / nacfe_fuel_consumption * 100
-	DoD_pct_diff = (model_DoD_percent - nacfe_DoD_percent) / nacfe_DoD_percent * 100
+	fuel_pct_diff_original = (model_fuel_original - nacfe_fuel_consumption) / nacfe_fuel_consumption * 100
+	fuel_pct_diff_calibrated = (model_fuel_calibrated - nacfe_fuel_consumption) / nacfe_fuel_consumption * 100
 
 	fig = plt.figure(figsize=(12, 7))
-	gs = fig.add_gridspec(3, 2, width_ratios=[4, 1], height_ratios=[1, 1, 1], wspace=0.3, hspace=0.2)
+	gs = fig.add_gridspec(3, 2, width_ratios=[4.8, 0.8], height_ratios=[1, 1, 1], wspace=0.15, hspace=0.2)
 
 	ax_speed = fig.add_subplot(gs[0, 0])
 	ax_grade = fig.add_subplot(gs[1, 0], sharex=ax_speed)
@@ -182,41 +181,41 @@ def plot_drivecycle_comparison(drivecycle_df, model_df, model_fuel_consumption, 
 	text_ax = fig.add_subplot(gs[:, 1])
 
 	ax_speed.plot(time_s, speed_mps, color="tab:blue")
-	ax_speed.set_ylabel("Speed (m/s)")
-	ax_speed.set_title(f"Drivecycle and Model Comparison (Event {driving_event})")
+	ax_speed.set_ylabel("Speed (m/s)", fontsize=16)
+	ax_speed.set_title(f"{truck_title}: Event {driving_event}", fontsize=18)
+	ax_speed.tick_params(axis='both', labelsize=14)
 
 	ax_grade.plot(time_s, road_grade_pct, color="tab:green")
-	ax_grade.set_ylabel("Road Grade (%)")
+	ax_grade.set_ylabel("Road Grade (%)", fontsize=16)
+	ax_grade.tick_params(axis='both', labelsize=14)
 
-	ax_power.scatter(time_s, instantaneous_power_w, s=12, color="tab:gray", label="Drivecycle power (W)")
-	ax_power.plot(time_s, model_df["Power request at battery (W)"], color="tab:red", label="Model power (W)")
-	ax_power.set_ylabel("Power (W)")
-	ax_power.set_xlabel("Time (s)")
-	ax_power.legend(loc="upper right")
+	ax_power.scatter(time_s, instantaneous_power_w, s=12, color="tab:gray", label="Battery Power Request (W)")
+	ax_power.plot(time_s, model_df_original["Power request at battery (W)"], color="tab:red", label="Model (Original)")
+	ax_power.plot(time_s, model_df_calibrated["Power request at battery (W)"], color="tab:orange", label="Model (Calibrated)")
+	ax_power.set_ylabel("Power (W)", fontsize=16)
+	ax_power.set_xlabel("Time (s)", fontsize=16)
+	ax_power.tick_params(axis='both', labelsize=14)
+	ax_power.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize=16)
 
 	text_ax.axis("off")
 	text_ax.text(
-		0.0,
-		0.95,
-		"NACFE vs Model\n",
-		fontsize=12,
+		-0.15,
+		0.97,
+		"Fuel economy (kWh/mi)",
+		fontsize=16,
 		fontweight="bold",
 		va="top",
 	)
 	text_ax.text(
-		0.0,
-		0.85,
+		-0.15,
+		0.91,
 		(
-			f"Fuel economy (kWh/mi)\n"
-			f"  NACFE: {nacfe_fuel_consumption:.3f} ± {nacfe_fuel_sem_pct:.1f}%\n"
-			f"  Model: {model_fuel_consumption:.3f}\n"
-			f"  % diff: {fuel_pct_diff:+.2f}%\n\n"
-			f"DoD (%)\n"
-			f"  NACFE: {nacfe_DoD_percent:.3f} ± {nacfe_DoD_sem_pct:.1f}%\n"
-			f"  Model: {model_DoD_percent:.3f}\n"
-			f"  % diff: {DoD_pct_diff:+.2f}%"
+			f"• $\\bf{{NACFE:}}$ {nacfe_fuel_consumption:.3f} ± {nacfe_fuel_sem_pct:.1f}%\n"
+			f"• $\\bf{{Original:}}$ {model_fuel_original:.3f} ({fuel_pct_diff_original:+.2f}%)\n"
+			f"• $\\bf{{Calibrated:}}$ {model_fuel_calibrated:.3f} ({fuel_pct_diff_calibrated:+.2f}%)"
 		),
-		fontsize=11,
+		fontsize=14,
+		linespacing=1.4,
 		va="top",
 	)
 
@@ -614,20 +613,21 @@ def plot_distribution_comparisons(datasets, plots_dir, param_suffix):
 def process_drivecycles_and_save_results(
 		datasets,
 		regenerate_model_results,
-		model_results_dir,
+		model_results_dir_original,
+		model_results_dir_calibrated,
 		optimized_params,
 		battery_caps,
 		m_truck_max_kg,
 		plots_dir,
-		param_suffix,
 	):
-	"""Process drivecycles for each dataset and write per-event results CSVs."""
+	"""Process drivecycles for each dataset and write per-event results CSVs for original and calibrated params."""
 	for dataset in datasets:
 		print(f"\nProcessing {dataset['name']}...")
 		
 		# Skip parameter loading if not regenerating
 		if not regenerate_model_results:
-			parameters = None
+			parameters_original = None
+			parameters_calibrated = None
 			battery_params_dict = None
 			e_bat = None
 			m_bat_kg = None
@@ -635,30 +635,34 @@ def process_drivecycles_and_save_results(
 			m_truck_no_bat_kg = None
 			m_truck_no_bat_lb = None
 		else:
-			parameters = data_collection_tools_messy.read_parameters(
+			parameters_original = data_collection_tools_messy.read_parameters(
 				truck_params=dataset["truck_params"],
 				vmt_params='daycab_vmt_vius_2021',
 				run='messy_middle',
 				truck_type='EV',
 			)
 
-			# Apply optimized parameters if requested
-			parameters = apply_optimized_parameters(parameters, optimized_params, dataset['name'])
+			parameters_calibrated = apply_optimized_parameters(
+				parameters_original,
+				optimized_params,
+				dataset['name'],
+			)
 
-			battery_params_dict = data_collection_tools_messy.read_battery_params(chemistry=parameters.battery_chemistry)
+			battery_params_dict = data_collection_tools_messy.read_battery_params(chemistry=parameters_original.battery_chemistry)
 			e_density = battery_params_dict['Energy density (kWh/ton)']
 
 			e_bat = battery_caps.loc['Mean', dataset["battery_col"]]
 			m_bat_kg = e_bat / e_density * KG_PER_TON          # Battery mass, in kg
 			m_bat_lb = m_bat_kg / KG_PER_LB
 
-			m_truck_no_bat_kg = parameters.m_truck_no_bat
+			m_truck_no_bat_kg = parameters_original.m_truck_no_bat
 			m_truck_no_bat_lb = m_truck_no_bat_kg / KG_PER_LB
 
 		drivecycle_files = sorted((BASE_DIR / "messy_middle_results").glob(dataset["drivecycle_glob"]))
 		
-		# Collect results for summary plot
-		truck_results = []
+		# Collect results for summary plots
+		truck_results_original = []
+		truck_results_calibrated = []
 		
 		# Read summary data for uncertainties
 		summary_df = pd.read_csv(str(BASE_DIR / dataset["summary_path"]), index_col="Driving event")
@@ -669,14 +673,27 @@ def process_drivecycles_and_save_results(
 			
 			# Try to load model results first
 			if not regenerate_model_results:
-				model_results = load_model_results(dataset['name'], driving_event, model_results_dir)
-				if model_results is None:
-					print(f"  Warning: Model results not found for event {driving_event}, skipping...")
+				model_results_original = load_model_results(dataset['name'], driving_event, model_results_dir_original)
+				model_results_calibrated = load_model_results(dataset['name'], driving_event, model_results_dir_calibrated)
+
+				if model_results_original is None:
+					print(f"  Warning: Original model results not found for event {driving_event}, skipping...")
 					continue
-				
-				fuel_consumption = model_results['fuel_consumption']
-				DoD = model_results['dod']
-				power_request_w = model_results['power_request_w']
+
+				if model_results_calibrated is None:
+					if optimized_params is None:
+						model_results_calibrated = model_results_original
+					else:
+						print(f"  Warning: Calibrated model results not found for event {driving_event}, skipping...")
+						continue
+
+				fuel_consumption_original = model_results_original['fuel_consumption']
+				DoD_original = model_results_original['dod']
+				power_request_w_original = model_results_original['power_request_w']
+
+				fuel_consumption_calibrated = model_results_calibrated['fuel_consumption']
+				DoD_calibrated = model_results_calibrated['dod']
+				power_request_w_calibrated = model_results_calibrated['power_request_w']
 			else:
 				# Regenerate model results
 				drivecycle_data = truck_model_tools_messy.extract_drivecycle_data(str(drivecycle_path))
@@ -690,20 +707,51 @@ def process_drivecycles_and_save_results(
 				payload_distribution = get_payload_distribution(m_payload_lb)
 
 				# Calculate the payload penalty factor
-				payload_penalty_factor = get_payload_penalty(payload_distribution, m_bat_kg, parameters.m_truck_no_bat, m_truck_max_kg)
+				_ = get_payload_penalty(payload_distribution, m_bat_kg, m_truck_no_bat_kg, m_truck_max_kg)
 
-				df, fuel_consumption, DoD = truck_model_tools_messy.truck_model(parameters).get_power_requirement(
+				df_original, fuel_consumption_original, DoD_original = truck_model_tools_messy.truck_model(
+					parameters_original
+				).get_power_requirement(
 					drivecycle_data,
 					m_gvw_kg,
 					eta_battery=battery_params_dict['Roundtrip efficiency'],
 					e_bat=e_bat,
 				)
 
-				print(f"  {drivecycle_path.name}: e_bat={e_bat:.1f}, fuel={fuel_consumption:.3f}, DoD={DoD:.3f}")
+				df_calibrated, fuel_consumption_calibrated, DoD_calibrated = truck_model_tools_messy.truck_model(
+					parameters_calibrated
+				).get_power_requirement(
+					drivecycle_data,
+					m_gvw_kg,
+					eta_battery=battery_params_dict['Roundtrip efficiency'],
+					e_bat=e_bat,
+				)
+
+				print(
+					f"  {drivecycle_path.name}: original fuel={fuel_consumption_original:.3f}, DoD={DoD_original:.3f}; "
+					f"calibrated fuel={fuel_consumption_calibrated:.3f}, DoD={DoD_calibrated:.3f}"
+				)
 
 				# Save model results
-				power_request_w = df["Power request at battery (W)"]
-				save_model_results(dataset['name'], driving_event, power_request_w, fuel_consumption, DoD, model_results_dir)
+				power_request_w_original = df_original["Power request at battery (W)"]
+				save_model_results(
+					dataset['name'],
+					driving_event,
+					power_request_w_original,
+					fuel_consumption_original,
+					DoD_original,
+					model_results_dir_original,
+				)
+
+				power_request_w_calibrated = df_calibrated["Power request at battery (W)"]
+				save_model_results(
+					dataset['name'],
+					driving_event,
+					power_request_w_calibrated,
+					fuel_consumption_calibrated,
+					DoD_calibrated,
+					model_results_dir_calibrated,
+				)
 			
 			# Get data values and uncertainties
 			if driving_event in summary_df.index:
@@ -724,28 +772,43 @@ def process_drivecycles_and_save_results(
 				dod_sem_pct = (dod_uncertainty / data_DoD_percent * 100) if data_DoD_percent > 0 else 0
 				
 				# Store results
-				truck_results.append({
+				truck_results_original.append({
 					'event': driving_event,
 					'data_fuel': data_fuel_consumption,
-					'model_fuel': fuel_consumption,
+					'model_fuel': fuel_consumption_original,
 					'fuel_unc_pct': fuel_sem_pct,
 					'data_dod': data_DoD_percent,
-					'model_dod': DoD * 100,
+					'model_dod': DoD_original * 100,
+					'dod_unc_pct': dod_sem_pct,
+				})
+
+				truck_results_calibrated.append({
+					'event': driving_event,
+					'data_fuel': data_fuel_consumption,
+					'model_fuel': fuel_consumption_calibrated,
+					'fuel_unc_pct': fuel_sem_pct,
+					'data_dod': data_DoD_percent,
+					'model_dod': DoD_calibrated * 100,
 					'dod_unc_pct': dod_sem_pct,
 				})
 
 				# Generate drivecycle comparison plot
-				reconstructed_df = pd.DataFrame({'Power request at battery (W)': power_request_w})
+				reconstructed_df_original = pd.DataFrame({'Power request at battery (W)': power_request_w_original})
+				reconstructed_df_calibrated = pd.DataFrame({'Power request at battery (W)': power_request_w_calibrated})
 				fig = plot_drivecycle_comparison(
 					drivecycle_data,
-					reconstructed_df,
-					fuel_consumption,
-					DoD,
+					reconstructed_df_original,
+					fuel_consumption_original,
+					DoD_original,
+					reconstructed_df_calibrated,
+					fuel_consumption_calibrated,
+					DoD_calibrated,
 					dataset["summary_path"],
 					driving_event,
+					dataset["truck_title"],
 				)
 
-				plot_path = plots_dir / f"{dataset['name']}_drivecycle_{driving_event}_comparison{param_suffix}.png"
+				plot_path = plots_dir / f"{dataset['name']}_drivecycle_{driving_event}_comparison_original_vs_calibrated.png"
 				fig.savefig(
 					plot_path,
 					dpi=300,
@@ -755,11 +818,17 @@ def process_drivecycles_and_save_results(
 				plt.close(fig)
 		
 		# Save results to CSV for later summary plotting
-		if truck_results:
-			results_df = pd.DataFrame(truck_results)
-			csv_path = plots_dir / f"{dataset['name']}_results{param_suffix}.csv"
-			results_df.to_csv(csv_path, index=False)
-			print(f"Saved results CSV: {csv_path}")
+		if truck_results_original:
+			results_df_original = pd.DataFrame(truck_results_original)
+			csv_path_original = plots_dir / f"{dataset['name']}_results_original.csv"
+			results_df_original.to_csv(csv_path_original, index=False)
+			print(f"Saved results CSV: {csv_path_original}")
+
+		if truck_results_calibrated:
+			results_df_calibrated = pd.DataFrame(truck_results_calibrated)
+			csv_path_calibrated = plots_dir / f"{dataset['name']}_results_optimized.csv"
+			results_df_calibrated.to_csv(csv_path_calibrated, index=False)
+			print(f"Saved results CSV: {csv_path_calibrated}")
 
 
 def evaluate_truck_on_all_drivecycles(
@@ -2416,21 +2485,24 @@ def main():
 	# Make plots_dir absolute to reference files from root
 	plots_dir = BASE_DIR / "plots_messy"
 	
-	model_results_dir = plots_dir / f"model_results{param_suffix}"
+	model_results_dir_original = plots_dir / "model_results_original"
+	model_results_dir_calibrated = plots_dir / "model_results_optimized"
 	if regenerate_model_results:
-		model_results_dir.mkdir(parents=True, exist_ok=True)
+		model_results_dir_original.mkdir(parents=True, exist_ok=True)
+		model_results_dir_calibrated.mkdir(parents=True, exist_ok=True)
 	
 	print(f"\nRunning analysis with {'optimized' if optimized else 'original'} parameters")
 	print(f"Regenerate model results: {regenerate_model_results}")
 	print(f"Output directory: {plots_dir.absolute()}")
-	print(f"Model results cache: {model_results_dir.absolute()}")
+	print(f"Model results cache (original): {model_results_dir_original.absolute()}")
+	print(f"Model results cache (calibrated): {model_results_dir_calibrated.absolute()}")
 	
 	datasets = [
 		{
 			"name": "saia2",
 			"truck_params": "saia",
 			"battery_col": "saia1",
-			"truck_title": "SAIA",
+			"truck_title": "Saia",
 			"drivecycle_glob": "saia2_drivecycle_*_detailed.csv",
 			"summary_path": "messy_middle_results/saia2_drivecycle_data.csv",
 		},
@@ -2460,16 +2532,16 @@ def main():
 		},
 	]
 
-	# process_drivecycles_and_save_results(
-	# 	datasets=datasets,
-	# 	regenerate_model_results=regenerate_model_results,
-	# 	model_results_dir=model_results_dir,
-	# 	optimized_params=optimized_params,
-	# 	battery_caps=battery_caps,
-	# 	m_truck_max_kg=m_truck_max_kg,
-	# 	plots_dir=plots_dir,
-	# 	param_suffix=param_suffix,
-	# )
+	process_drivecycles_and_save_results(
+		datasets=datasets,
+		regenerate_model_results=regenerate_model_results,
+		model_results_dir_original=model_results_dir_original,
+		model_results_dir_calibrated=model_results_dir_calibrated,
+		optimized_params=optimized_params,
+		battery_caps=battery_caps,
+		m_truck_max_kg=m_truck_max_kg,
+		plots_dir=plots_dir,
+	)
 
 	# # Read in saved results for each truck and calculate and plot distributions of the cost/mile and CO2e/mile for each driving event
 	# add_cost_emissions(

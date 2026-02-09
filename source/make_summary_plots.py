@@ -19,6 +19,14 @@ from pathlib import Path
 # Truck names to process
 TRUCK_NAMES = ['saia2', '4gen', 'joyride', 'nevoya_with_weight']
 
+# Display titles for plots
+TRUCK_TITLES = {
+    'saia2': 'Saia',
+    '4gen': '4Gen',
+    'joyride': 'Joyride',
+    'nevoya_with_weight': 'Nevoya',
+}
+
 # Directory containing results
 RESULTS_DIR = Path('plots_messy')
 OUTPUT_DIR = Path('plots_messy')
@@ -37,7 +45,7 @@ def plot_truck_comparison(truck_name, original_df, optimized_df):
     optimized_df : pd.DataFrame
         Results with optimized parameters
     """
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+    fig, ax1 = plt.subplots(1, 1, figsize=(12, 6))
     
     # Sort by event number
     original_df = original_df.sort_values('event')
@@ -55,75 +63,25 @@ def plot_truck_comparison(truck_name, original_df, optimized_df):
             facecolor='none', linewidth=2, label='Model (Original)')
     ax1.bar(x_pos + bar_width/2, optimized_df['model_fuel'], 
             width=bar_width, alpha=0.3, edgecolor='C1', 
-            facecolor='none', linewidth=2, label='Model (Optimized)')
+            facecolor='none', linewidth=2, label='Model (Calibrated)')
     
     # Plot data as markers with error bars
     # Convert percentage uncertainties to absolute values
     fuel_errors = original_df['data_fuel'] * original_df['fuel_unc_pct'] / 100
     ax1.errorbar(x_pos, original_df['data_fuel'], yerr=fuel_errors,
-                 fmt='o', color='black', markersize=8, capsize=5, 
+                 fmt='o', color='black', markersize=16, capsize=10, 
                  linewidth=2, label='Data', zorder=10)
     
-    ax1.set_ylabel('Fuel Economy (kWh/mile)', fontsize=12)
-    ax1.set_title(f'{truck_name} - Fuel Economy Comparison', fontsize=14, fontweight='bold')
+    truck_title = TRUCK_TITLES.get(truck_name, truck_name)
+    ax1.set_ylabel('Fuel Economy (kWh/mile)', fontsize=24)
+    ax1.set_title(f'{truck_title}', fontsize=28, fontweight='bold')
     ax1.set_xticks(x_pos)
-    ax1.set_xticklabels(events)
-    ax1.set_xlabel('Driving Event', fontsize=12)
-    ax1.legend(loc='upper right')
+    ax1.set_xticklabels(events, fontsize=18)
+    ax1.set_xlabel('Driving Event', fontsize=24)
+    ax1.legend(loc='lower left', bbox_to_anchor=(0, 1.02, 1, 0.2),
+               ncol=2, mode='expand', borderaxespad=0, fontsize=24, frameon=False)
     ax1.grid(axis='y', alpha=0.3)
-    
-    # Calculate weighted mean signed percentage error
-    # Weight inversely proportional to uncertainty squared
-    orig_weights = 1.0 / (original_df['fuel_unc_pct']**2 + 1e-6)
-    orig_pct_errors = (original_df['model_fuel'] - original_df['data_fuel']) / original_df['data_fuel'] * 100
-    orig_weighted_mean_error = np.average(orig_pct_errors, weights=orig_weights)
-    
-    opt_weights = 1.0 / (optimized_df['fuel_unc_pct']**2 + 1e-6)
-    opt_pct_errors = (optimized_df['model_fuel'] - optimized_df['data_fuel']) / optimized_df['data_fuel'] * 100
-    opt_weighted_mean_error = np.average(opt_pct_errors, weights=opt_weights)
-    
-    textstr = (f'Mean Signed % Error (Original): {orig_weighted_mean_error:+.2f}%\n'
-               f'Mean Signed % Error (Optimized): {opt_weighted_mean_error:+.2f}%')
-    ax1.text(0.02, 0.98, textstr, transform=ax1.transAxes, fontsize=10,
-             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
-    
-    # --- Depth of Discharge Panel ---
-    # Plot model results as unfilled bars
-    ax2.bar(x_pos - bar_width/2, original_df['model_dod'], 
-            width=bar_width, alpha=0.3, edgecolor='C0', 
-            facecolor='none', linewidth=2, label='Model (Original)')
-    ax2.bar(x_pos + bar_width/2, optimized_df['model_dod'], 
-            width=bar_width, alpha=0.3, edgecolor='C1', 
-            facecolor='none', linewidth=2, label='Model (Optimized)')
-    
-    # Plot data as markers with error bars
-    dod_errors = original_df['data_dod'] * original_df['dod_unc_pct'] / 100
-    ax2.errorbar(x_pos, original_df['data_dod'], yerr=dod_errors,
-                 fmt='o', color='black', markersize=8, capsize=5, 
-                 linewidth=2, label='Data', zorder=10)
-    
-    ax2.set_ylabel('Depth of Discharge (%)', fontsize=12)
-    ax2.set_title(f'{truck_name} - Depth of Discharge Comparison', fontsize=14, fontweight='bold')
-    ax2.set_xticks(x_pos)
-    ax2.set_xticklabels(events)
-    ax2.set_xlabel('Driving Event', fontsize=12)
-    ax2.legend(loc='upper right')
-    ax2.grid(axis='y', alpha=0.3)
-    
-    # Calculate weighted mean signed percentage error
-    # Weight inversely proportional to uncertainty squared
-    orig_weights_dod = 1.0 / (original_df['dod_unc_pct']**2 + 1e-6)
-    orig_pct_errors_dod = (original_df['model_dod'] - original_df['data_dod']) / original_df['data_dod'] * 100
-    orig_weighted_mean_error_dod = np.average(orig_pct_errors_dod, weights=orig_weights_dod)
-    
-    opt_weights_dod = 1.0 / (optimized_df['dod_unc_pct']**2 + 1e-6)
-    opt_pct_errors_dod = (optimized_df['model_dod'] - optimized_df['data_dod']) / optimized_df['data_dod'] * 100
-    opt_weighted_mean_error_dod = np.average(opt_pct_errors_dod, weights=opt_weights_dod)
-    
-    textstr = (f'Mean Signed % Error (Original): {orig_weighted_mean_error_dod:+.2f}%\n'
-               f'Mean Signed % Error (Optimized): {opt_weighted_mean_error_dod:+.2f}%')
-    ax2.text(0.02, 0.98, textstr, transform=ax2.transAxes, fontsize=10,
-             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+    ax1.tick_params(axis='y', labelsize=18)
     
     plt.tight_layout()
     return fig
