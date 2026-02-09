@@ -446,6 +446,19 @@ def add_cost_emissions(
 		# Get the maximum charging power for the truck
 		max_charging_power = max_charging_power_data.loc[truck_name, "99th_percentile_charging_power_kw"]
 
+		# Use a consistent average payload for US-average inputs
+		gvw_values = []
+		for _, row in results_df.iterrows():
+			source_truck = row["source_truck"]
+			driving_event = int(row["drivecycle_number"])
+			drivecycle_path = resolve_drivecycle_path(source_truck, driving_event)
+			drivecycle_data = truck_model_tools_messy.extract_drivecycle_data(str(drivecycle_path))
+			m_gvw_kg = drivecycle_data["GVW (kg)"].loc[0]
+			gvw_values.append(m_gvw_kg / KG_PER_LB)
+
+		avg_gvw_lb = float(np.nanmean(gvw_values)) if gvw_values else 0.0
+		payload_baseline = avg_gvw_lb - m_truck_no_bat_lb - m_bat_lb
+
 		# Loop through all results in the results_df and calculate cost and emissions for each driving event, then add to the dataframe
 		expected_cost_cols = [
 			"Total capital ($/mi)",
@@ -955,15 +968,7 @@ def add_cost_emissions_all_drivecycles(
 		emissions = []
 		for _, row in results_df.iterrows():
 			fuel_consumption_kwh_per_mile = row["fuel_economy_kWh_per_mile"]
-			source_truck = row["source_truck"]
-			driving_event = int(row["drivecycle_number"])
-
-			drivecycle_path = resolve_drivecycle_path(source_truck, driving_event)
-			drivecycle_data = truck_model_tools_messy.extract_drivecycle_data(str(drivecycle_path))
-
-			m_gvw_kg = drivecycle_data["GVW (kg)"].loc[0]
-			m_gvw_lb = m_gvw_kg / KG_PER_LB
-			m_payload_lb = m_gvw_lb - m_truck_no_bat_lb - m_bat_lb
+			m_payload_lb = payload_baseline
 
 			cost_per_mile = evaluate_costs(
 				mileage=fuel_consumption_kwh_per_mile,
@@ -2516,24 +2521,24 @@ def main():
 	# 	param_suffix=param_suffix,
 	# )
 
-	# Evaluate diesel model on all drivecycles (using EV-optimized cd/cr), add diesel costs, and plot EV TCO premium
-	evaluate_diesel_on_all_drivecycles(
-		datasets=datasets,
-		optimized_params=optimized_params,
-		results_dir=plots_dir,
-		param_suffix=param_suffix,
-	)
-	add_costs_diesel_all_drivecycles(
-		datasets=datasets,
-		plots_dir=plots_dir,
-		param_suffix=param_suffix,
-		average_vmt=average_vmt,
-	)
-	plot_tco_premium_all_drivecycles(
-		datasets=datasets,
-		plots_dir=plots_dir,
-		param_suffix=param_suffix,
-	)
+	# # Evaluate diesel model on all drivecycles (using EV-optimized cd/cr), add diesel costs, and plot EV TCO premium
+	# evaluate_diesel_on_all_drivecycles(
+	# 	datasets=datasets,
+	# 	optimized_params=optimized_params,
+	# 	results_dir=plots_dir,
+	# 	param_suffix=param_suffix,
+	# )
+	# add_costs_diesel_all_drivecycles(
+	# 	datasets=datasets,
+	# 	plots_dir=plots_dir,
+	# 	param_suffix=param_suffix,
+	# 	average_vmt=average_vmt,
+	# )
+	# plot_tco_premium_all_drivecycles(
+	# 	datasets=datasets,
+	# 	plots_dir=plots_dir,
+	# 	param_suffix=param_suffix,
+	# )
 	
 	# # Generate detailed cost and emissions breakdown
 	# generate_cost_emissions_breakdown(

@@ -122,9 +122,13 @@ Inputs:
     - electricity_charge (float): Retail electricity price ($/kWh)
     - charging_power (float): Average charging power (kW)
     - charging_efficiency (float): Efficiency of charging the battery (relative to energy from the power source)
+    - charger_ratio (float): Ratio of chargers to trucks (1.0 = one charger per truck, 0.5 = one charger per two trucks)
 """
-def calculate_electricity_unit(VMT, mileage, demand_charge, electricity_charge, charging_power, lifetime_energy_demand, charging_efficiency=0.92, charger_cost_filename=None, charger_cost_scenario='Baseline'):
-    lifetime = 15       # Lifetime of the capital assets
+def calculate_electricity_unit(VMT, mileage, demand_charge, electricity_charge, charging_power, lifetime_energy_demand, charging_efficiency=0.92, charger_cost_filename=None, charger_cost_scenario='Baseline', charger_ratio=1.0, charger_amortization_years=None):
+    if charger_amortization_years is None:
+        lifetime = 15       # Lifetime of the capital assets (default)
+    else:
+        lifetime = float(charger_amortization_years)  # Use provided amortization period
     discount_rate = 7        # Discount rate (%)
     
     # Use BASE_DIR if filename not provided
@@ -137,23 +141,26 @@ def calculate_electricity_unit(VMT, mileage, demand_charge, electricity_charge, 
     # Convert charging energy per month to kWh
     charging_energy_per_month = calculate_charging_energy_per_month(VMT, mileage)
     
-    capital_cost = (hardware_cost + installation_cost) * (1 + discount_rate / 100.)**lifetime
+    # Apply charger ratio to capital and fixed costs (shared across trucks)
+    capital_cost = (hardware_cost + installation_cost) * (1 + discount_rate / 100.)**lifetime * charger_ratio
     norm_cap_cost = capital_cost / lifetime_energy_demand
     norm_demand_charge = charging_power * demand_charge / charging_energy_per_month
     norm_energy_charge = electricity_charge / charging_efficiency
-    norm_fixed_monthly = fixed_monthly_cost / charging_energy_per_month
+    norm_fixed_monthly = (fixed_monthly_cost * charger_ratio) / charging_energy_per_month
     total_charge = norm_cap_cost + norm_demand_charge + norm_energy_charge + norm_fixed_monthly
     
     return total_charge, norm_cap_cost, norm_fixed_monthly, norm_energy_charge, norm_demand_charge
     
-def calculate_electricity_unit_by_row(row, mileage, demand_charge, electricity_charge, charging_power, lifetime_energy_demand):
+def calculate_electricity_unit_by_row(row, mileage, demand_charge, electricity_charge, charging_power, lifetime_energy_demand, charger_ratio=1.0, charger_amortization_years=None):
     total_charge, norm_cap_cost, norm_fixed_monthly, norm_energy_charge, norm_demand_charge = calculate_electricity_unit(
         VMT = row['VMT (miles)'],
         mileage = mileage,
         demand_charge = demand_charge,
         electricity_charge = electricity_charge,
         charging_power = charging_power,
-        lifetime_energy_demand = lifetime_energy_demand)
+        lifetime_energy_demand = lifetime_energy_demand,
+        charger_ratio = charger_ratio,
+        charger_amortization_years = charger_amortization_years)
     return pd.Series([total_charge, norm_cap_cost, norm_fixed_monthly, norm_energy_charge, norm_demand_charge])
     
 """
@@ -203,11 +210,12 @@ Inputs:
     - demand charge (float): Monthly charge for peak power used ($/kW)
     - electricity_charge (float): Retail electricity price ($/kWh)
     - charging_power (float): Average charging power (kW)
+    - charger_ratio (float): Ratio of chargers to trucks (1.0 = one charger per truck)
 """
-def get_electricity_cost_by_year(parameters, mileage, demand_charge, electricity_charge, charging_power):
+def get_electricity_cost_by_year(parameters, mileage, demand_charge, electricity_charge, charging_power, charger_ratio=1.0, charger_amortization_years=None):
     electricity_cost_df = parameters.VMT.copy()
     lifetime_energy_demand = calculate_lifetime_energy_demand(parameters.VMT, mileage)
-    electricity_cost_df[['Total', 'Normalized capital', 'Normalized fixed', 'Normalized energy charge', 'Normalized demand charge']] = electricity_cost_df.apply(calculate_electricity_unit_by_row, axis=1, mileage=mileage, demand_charge=demand_charge, electricity_charge=electricity_charge, charging_power=charging_power, lifetime_energy_demand=lifetime_energy_demand)     # $/kWh
+    electricity_cost_df[['Total', 'Normalized capital', 'Normalized fixed', 'Normalized energy charge', 'Normalized demand charge']] = electricity_cost_df.apply(calculate_electricity_unit_by_row, axis=1, mileage=mileage, demand_charge=demand_charge, electricity_charge=electricity_charge, charging_power=charging_power, lifetime_energy_demand=lifetime_energy_demand, charger_ratio=charger_ratio, charger_amortization_years=charger_amortization_years)     # $/kWh
     return electricity_cost_df
     
 """
