@@ -32,6 +32,7 @@ datasets = [
         "name": "saia2",
         "truck_params": "saia",
         "battery_col": "saia1",
+        "truck_title": "Saia",
         "drivecycle_glob": "saia2_drivecycle_*_detailed.csv",
         "summary_path": "messy_middle_results/saia2_drivecycle_data.csv",
     },
@@ -39,6 +40,7 @@ datasets = [
         "name": "4gen",
         "truck_params": "4gen",
         "battery_col": "4gen",
+        "truck_title": "4Gen",
         "drivecycle_glob": "4gen_drivecycle_*_detailed.csv",
         "summary_path": "messy_middle_results/4gen_drivecycle_data.csv",
     },
@@ -46,6 +48,7 @@ datasets = [
         "name": "joyride",
         "truck_params": "joyride",
         "battery_col": "joyride",
+        "truck_title": "Joyride",
         "drivecycle_glob": "joyride_drivecycle_*_detailed.csv",
         "summary_path": "messy_middle_results/joyride_drivecycle_data.csv",
     },
@@ -53,6 +56,7 @@ datasets = [
         "name": "nevoya_with_weight",
         "truck_params": "nevoya",
         "battery_col": "nevoya_with_weight",
+        "truck_title": "Nevoya",
         "drivecycle_glob": "nevoya_with_weight_drivecycle_*_detailed.csv",
         "summary_path": "messy_middle_results/nevoya_with_weight_drivecycle_data.csv",
     },
@@ -356,43 +360,44 @@ def plot_validation_results(results_df):
     plots_dir = Path("plots")
     plots_dir.mkdir(parents=True, exist_ok=True)
     
-    # 1. Parameter change plots
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+    # 1. Parameter change plots - stacked vertically
+    fig, axes = plt.subplots(3, 1, figsize=(10, 12))
     
-    trucks = results_df['Truck'].values
+    trucks = results_df['Truck_title'].values if 'Truck_title' in results_df.columns else results_df['Truck'].values
     
     # Drag coefficient
     axes[0].bar(np.arange(len(trucks)) - 0.2, results_df['cd_initial'], width=0.4, label='Initial', alpha=0.8)
-    axes[0].bar(np.arange(len(trucks)) + 0.2, results_df['cd_optimal'], width=0.4, label='Optimal', alpha=0.8)
+    axes[0].bar(np.arange(len(trucks)) + 0.2, results_df['cd_optimal'], width=0.4, label='Calibrated', alpha=0.8)
     axes[0].axhline(y=0.25, color='r', linestyle='--', linewidth=1, alpha=0.5, label='Min')
     axes[0].axhline(y=0.6, color='g', linestyle='--', linewidth=1, alpha=0.5, label='Max')
-    axes[0].set_ylabel('Drag Coefficient')
+    axes[0].set_ylabel('Drag Coefficient', fontsize=14)
     axes[0].set_xticks(np.arange(len(trucks)))
-    axes[0].set_xticklabels(trucks, rotation=45, ha='right')
-    axes[0].legend()
+    axes[0].set_xticklabels([])  # No labels on top plot
+    axes[0].legend(loc='lower left', bbox_to_anchor=(0, 1.02, 1, 0.2), ncol=2, mode='expand', borderaxespad=0, fontsize=18, frameon=False)
     axes[0].grid(True, alpha=0.3)
+    axes[0].tick_params(axis='y', labelsize=12)
     
     # Rolling resistance
     axes[1].bar(np.arange(len(trucks)) - 0.2, results_df['cr_initial'], width=0.4, label='Initial', alpha=0.8)
-    axes[1].bar(np.arange(len(trucks)) + 0.2, results_df['cr_optimal'], width=0.4, label='Optimal', alpha=0.8)
+    axes[1].bar(np.arange(len(trucks)) + 0.2, results_df['cr_optimal'], width=0.4, label='Calibrated', alpha=0.8)
     axes[1].axhline(y=0.003, color='r', linestyle='--', linewidth=1, alpha=0.5, label='Min')
     axes[1].axhline(y=0.006, color='g', linestyle='--', linewidth=1, alpha=0.5, label='Max')
-    axes[1].set_ylabel('Rolling Resistance Coefficient')
+    axes[1].set_ylabel('Rolling Resistance Coefficient', fontsize=14)
     axes[1].set_xticks(np.arange(len(trucks)))
-    axes[1].set_xticklabels(trucks, rotation=45, ha='right')
-    axes[1].legend()
+    axes[1].set_xticklabels([])  # No labels on middle plot
     axes[1].grid(True, alpha=0.3)
+    axes[1].tick_params(axis='y', labelsize=12)
     
     # Efficiency
     axes[2].bar(np.arange(len(trucks)) - 0.2, results_df['eta_initial'], width=0.4, label='Initial', alpha=0.8)
-    axes[2].bar(np.arange(len(trucks)) + 0.2, results_df['eta_optimal'], width=0.4, label='Optimal', alpha=0.8)
+    axes[2].bar(np.arange(len(trucks)) + 0.2, results_df['eta_optimal'], width=0.4, label='Calibrated', alpha=0.8)
     axes[2].axhline(y=0.85, color='r', linestyle='--', linewidth=1, alpha=0.5, label='Min')
     axes[2].axhline(y=0.97, color='g', linestyle='--', linewidth=1, alpha=0.5, label='Max')
-    axes[2].set_ylabel('Inverter × Motor Efficiency')
+    axes[2].set_ylabel('Inverter × Motor Efficiency', fontsize=14)
     axes[2].set_xticks(np.arange(len(trucks)))
-    axes[2].set_xticklabels(trucks, rotation=45, ha='right')
-    axes[2].legend()
+    axes[2].set_xticklabels(trucks, fontsize=20)  # Labels only on bottom plot, no rotation
     axes[2].grid(True, alpha=0.3)
+    axes[2].tick_params(axis='y', labelsize=12)
     
     plt.tight_layout()
     plt.savefig(plots_dir / 'parameter_optimization_comparison.png', dpi=300, bbox_inches='tight')
@@ -406,14 +411,15 @@ def plot_validation_results(results_df):
     
     # Plot absolute values for comparison
     ax.bar(x - width/2, results_df['mean_pct_error_initial'].abs(), width, label='Initial', alpha=0.8)
-    ax.bar(x + width/2, results_df['mean_pct_error_optimal'].abs(), width, label='Optimal', alpha=0.8)
+    ax.bar(x + width/2, results_df['mean_pct_error_optimal'].abs(), width, label='Calibrated', alpha=0.8)
     
-    ax.set_ylabel('|Mean Signed % Error| in Fuel Economy')
-    ax.set_xlabel('Truck')
-    ax.set_title('Optimization Improvement: Mean Error Bias Reduction')
+    ax.set_ylabel('|Mean Signed % Error| in Fuel Economy', fontsize=14)
+    ax.set_xlabel('Truck', fontsize=14)
+    ax.set_title('Optimization Improvement: Mean Error Bias Reduction', fontsize=16)
     ax.set_xticks(x)
-    ax.set_xticklabels(trucks, rotation=45, ha='right')
-    ax.legend()
+    ax.set_xticklabels(trucks, fontsize=20)
+    ax.tick_params(axis='y', labelsize=12)
+    ax.legend(loc='lower left', bbox_to_anchor=(0, 1.02, 1, 0.2), ncol=2, mode='expand', borderaxespad=0, fontsize=18, frameon=False)
     ax.grid(True, alpha=0.3, axis='y')
     
     # Add improvement labels
@@ -422,7 +428,7 @@ def plot_validation_results(results_df):
         optimal_abs = abs(results_df.iloc[i]['mean_pct_error_optimal'])
         improvement = ((initial_abs - optimal_abs) / initial_abs * 100) if initial_abs > 0 else 0
         ax.text(i, max(initial_abs, optimal_abs) * 1.05,
-               f'{improvement:.1f}%', ha='center', fontsize=9)
+               f'{improvement:.1f}%', ha='center', fontsize=10)
     
     plt.tight_layout()
     plt.savefig(plots_dir / 'mean_signed_pct_error_improvement.png', dpi=300, bbox_inches='tight')
@@ -537,7 +543,7 @@ def plot_residuals(optimizer, results_entry):
     plots_dir = Path("plots")
     plots_dir.mkdir(parents=True, exist_ok=True)
     
-    truck_name = results_entry['Truck']
+    truck_name = results_entry.get('Truck_title', results_entry['Truck'])
     
     # Get predictions for both initial and optimal parameters
     pred_initial = get_model_predictions(
@@ -611,57 +617,67 @@ def main():
     results_list = []
     optimizers = []
     
-    for dataset in datasets:
-        # Read parameters
-        parameters = data_collection_tools_messy.read_parameters(
-            truck_params=dataset["truck_params"],
-            vmt_params='daycab_vmt_vius_2021',
-            run='messy_middle',
-            truck_type='EV',
-        )
+    # for dataset in datasets:
+    #     # Read parameters
+    #     parameters = data_collection_tools_messy.read_parameters(
+    #         truck_params=dataset["truck_params"],
+    #         vmt_params='daycab_vmt_vius_2021',
+    #         run='messy_middle',
+    #         truck_type='EV',
+    #     )
         
-        battery_params_dict = data_collection_tools_messy.read_battery_params(chemistry=parameters.battery_chemistry)
-        e_density = battery_params_dict['Energy density (kWh/ton)']
+    #     battery_params_dict = data_collection_tools_messy.read_battery_params(chemistry=parameters.battery_chemistry)
+    #     e_density = battery_params_dict['Energy density (kWh/ton)']
         
-        e_bat = battery_caps.loc['Mean', dataset["battery_col"]]
-        m_bat_kg = e_bat / e_density * KG_PER_TON
-        m_truck_no_bat_kg = parameters.m_truck_no_bat
+    #     e_bat = battery_caps.loc['Mean', dataset["battery_col"]]
+    #     m_bat_kg = e_bat / e_density * KG_PER_TON
+    #     m_truck_no_bat_kg = parameters.m_truck_no_bat
         
-        # Create optimizer
-        optimizer = ParameterOptimizer(
-            dataset,
-            parameters,
-            battery_params_dict,
-            e_bat,
-            m_bat_kg,
-            m_truck_no_bat_kg
-        )
-        optimizers.append(optimizer)
+    #     # Create optimizer
+    #     optimizer = ParameterOptimizer(
+    #         dataset,
+    #         parameters,
+    #         battery_params_dict,
+    #         e_bat,
+    #         m_bat_kg,
+    #         m_truck_no_bat_kg
+    #     )
+    #     optimizers.append(optimizer)
         
-        # Perform optimization
-        result = optimizer.optimize()
+    #     # Perform optimization
+    #     result = optimizer.optimize()
         
-        # Store results
-        result_entry = {
-            'Truck': dataset['name'],
-            'cd_initial': parameters.cd,
-            'cd_optimal': result.x[0],
-            'cr_initial': parameters.cr,
-            'cr_optimal': result.x[1],
-            'eta_initial': parameters.eta_i * parameters.eta_m,
-            'eta_optimal': result.x[2],
-            'mean_pct_error_initial': optimizer.objective_function(np.array([parameters.cd, parameters.cr, parameters.eta_i * parameters.eta_m])),
-            'mean_pct_error_optimal': result.fun,
-            'optimization_success': result.success,
-        }
-        results_list.append(result_entry)
+    #     # Store results
+    #     result_entry = {
+    #         'Truck': dataset['name'],
+    #         'Truck_title': dataset['truck_title'],
+    #         'cd_initial': parameters.cd,
+    #         'cd_optimal': result.x[0],
+    #         'cr_initial': parameters.cr,
+    #         'cr_optimal': result.x[1],
+    #         'eta_initial': parameters.eta_i * parameters.eta_m,
+    #         'eta_optimal': result.x[2],
+    #         'mean_pct_error_initial': optimizer.objective_function(np.array([parameters.cd, parameters.cr, parameters.eta_i * parameters.eta_m])),
+    #         'mean_pct_error_optimal': result.fun,
+    #         'optimization_success': result.success,
+    #     }
+    #     results_list.append(result_entry)
     
-    # Write results to CSV
-    results_df = pd.DataFrame(results_list)
-    results_df.to_csv('parameter_optimization_results.csv', index=False)
-    print(f"\n{'='*70}")
-    print("Results saved to parameter_optimization_results.csv")
-    print(f"{'='*70}")
+    # # Write results to CSV
+    # results_df = pd.DataFrame(results_list)
+    # results_df.to_csv('parameter_optimization_results.csv', index=False)
+    # print(f"\n{'='*70}")
+    # print("Results saved to parameter_optimization_results.csv")
+    # print(f"{'='*70}")
+    
+    # Read results from CSV for plotting (allows plot generation without rerunning optimization)
+    results_df = pd.read_csv('parameter_optimization_results.csv')
+    
+    # Add Truck_title if not present (for backwards compatibility with old CSVs)
+    if 'Truck_title' not in results_df.columns:
+        truck_title_map = {ds['name']: ds['truck_title'] for ds in datasets}
+        results_df['Truck_title'] = results_df['Truck'].map(truck_title_map)
+    
     print(results_df.to_string())
     
     # Generate validation plots
