@@ -351,6 +351,9 @@ def evaluate_costs(mileage, payload_lb, electricity_charge, demand_charge, avera
 
     # Calculate TCO per mile
     TCO = costing_tools.cost(parameters).get_TCO(vehicle_model_results_dict, truck_cost_data['Capital Costs'], truck_cost_data['Battery Unit Cost ($/kWh)'], truck_cost_data['Operating Costs'], electricity_cost_df['Total'], battery_params_dict['Replacements'], vehicle_purchase_price = vehicle_purchase_price, e_bat=e_bat)
+
+    # Surface payload penalty factor for downstream reporting
+    TCO['Payload penalty factor'] = vehicle_model_results_dict['Payload penalty factor']
     
     return TCO
 

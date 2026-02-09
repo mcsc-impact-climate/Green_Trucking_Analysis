@@ -288,14 +288,16 @@ def load_model_results(truck_name, event_id, model_results_dir):
 	return results
 
 
-def plot_truck_summary(truck_name, results, param_suffix, plots_dir):
+def plot_truck_summary(truck_name, truck_title, results, param_suffix, plots_dir):
 	"""
 	Create summary plots comparing model vs data for all driving events.
 	
 	Parameters:
 	-----------
 	truck_name : str
-		Name of the truck
+		Internal truck identifier for file naming
+	truck_title : str
+		Display name for truck used in plot titles
 	results : list of dict
 		List of dictionaries containing results for each driving event
 	param_suffix : str
@@ -332,7 +334,7 @@ def plot_truck_summary(truck_name, results, param_suffix, plots_dir):
 	ax1.bar(x + width/2, model_fuel, width, label='Model', alpha=0.8, color='tab:orange')
 	
 	ax1.set_ylabel('Fuel Economy (kWh/mile)')
-	ax1.set_title(f'{truck_name} - Fuel Economy Comparison')
+	ax1.set_title(f'{truck_title} - Fuel Economy Comparison')
 	ax1.set_xticks(x)
 	ax1.set_xticklabels(events, rotation=45, ha='right')
 	ax1.set_xlabel('Driving Event')
@@ -366,7 +368,7 @@ def plot_truck_summary(truck_name, results, param_suffix, plots_dir):
 	ax2.bar(x + width/2, model_dod, width, label='Model', alpha=0.8, color='tab:orange')
 	
 	ax2.set_ylabel('Depth of Discharge (%)')
-	ax2.set_title(f'{truck_name} - DoD Comparison')
+	ax2.set_title(f'{truck_title} - DoD Comparison')
 	ax2.set_xticks(x)
 	ax2.set_xticklabels(events, rotation=45, ha='right')
 	ax2.set_xlabel('Driving Event')
@@ -452,6 +454,7 @@ def add_cost_emissions(
 			"Total labor ($/mi)",
 			"Other OPEXs ($/mi)",
 			"TCO ($/mi)",
+			"Payload penalty factor",
 		]
 		expected_emissions_cols = [
 			"GHGs manufacturing (gCO2/mi)",
@@ -505,11 +508,15 @@ def generate_summary_plots(datasets, plots_dir, param_suffix):
 	"""Generate summary plots for each truck from the updated results CSVs."""
 	for dataset in datasets:
 		truck_name = dataset['name']
+		truck_title = dataset.get('truck_title', truck_name)
 		results_csv = plots_dir / f"{truck_name}_results{param_suffix}.csv"
 		if not results_csv.exists():
 			continue
 		results_df = pd.read_csv(results_csv)
-		plot_truck_summary(truck_name, results_df.to_dict('records'), param_suffix, plots_dir)
+		plot_truck_summary(truck_name, truck_title, results_df.to_dict('records'), param_suffix, plots_dir)
+
+
+_DISTRIBUTION_Y_LIMITS = {}
 
 
 def plot_distribution_comparisons(datasets, plots_dir, param_suffix):
@@ -517,12 +524,13 @@ def plot_distribution_comparisons(datasets, plots_dir, param_suffix):
 	truck_data = {}
 	for dataset in datasets:
 		truck_name = dataset['name']
+		truck_title = dataset.get('truck_title', truck_name)
 		results_csv = plots_dir / f"{truck_name}_results{param_suffix}.csv"
 		if not results_csv.exists():
 			print(f"Warning: Results CSV not found for {truck_name}, skipping distribution plot.")
 			continue
 		results_df = pd.read_csv(results_csv)
-		truck_data[truck_name] = results_df
+		truck_data[truck_title] = results_df
 
 	if not truck_data:
 		print("Warning: No results CSVs found for distribution plots.")
@@ -544,11 +552,21 @@ def plot_distribution_comparisons(datasets, plots_dir, param_suffix):
 			print(f"Warning: No data for {column}, skipping {output_name}.")
 			return
 
-		plt.figure(figsize=(10, 6))
+		plt.figure(figsize=(6, 6))
 		plt.boxplot(values_list, tick_labels=labels, showmeans=True, meanprops=dict(marker='o', markerfacecolor='red', markeredgecolor='red'))
-		plt.title(title)
-		plt.ylabel(ylabel)
-		plt.xticks(rotation=20, ha='right')
+		plt.ylabel(ylabel, fontsize=18)
+		plt.xticks(rotation=20, ha='right', fontsize=15)
+		plt.yticks(fontsize=15)
+
+		flat_values = np.concatenate(values_list)
+		if flat_values.size > 0:
+			min_val = float(np.nanmin(flat_values))
+			max_val = float(np.nanmax(flat_values))
+			if column not in _DISTRIBUTION_Y_LIMITS:
+				pad = (max_val - min_val) * 0.08 if max_val > min_val else max_val * 0.08
+				_DISTRIBUTION_Y_LIMITS[column] = (min_val - pad, max_val + pad)
+			plt.ylim(_DISTRIBUTION_Y_LIMITS[column])
+
 		plt.tight_layout()
 		output_path = plots_dir / output_name
 		plt.savefig(output_path, dpi=300, bbox_inches='tight')
@@ -925,6 +943,7 @@ def add_cost_emissions_all_drivecycles(
 			"Total labor ($/mi)",
 			"Other OPEXs ($/mi)",
 			"TCO ($/mi)",
+			"Payload penalty factor",
 		]
 		expected_emissions_cols = [
 			"GHGs manufacturing (gCO2/mi)",
@@ -1155,6 +1174,7 @@ def plot_tco_premium_all_drivecycles(datasets, plots_dir, param_suffix):
 
 	for dataset in datasets:
 		truck_name = dataset["name"]
+		truck_title = dataset.get('truck_title', truck_name)
 		ev_csv = plots_dir / f"{truck_name}_all_drivecycles_results{param_suffix}.csv"
 		diesel_csv = plots_dir / f"{truck_name}_all_drivecycles_diesel_results{param_suffix}.csv"
 		if not ev_csv.exists() or not diesel_csv.exists():
@@ -1184,7 +1204,7 @@ def plot_tco_premium_all_drivecycles(datasets, plots_dir, param_suffix):
 			print(f"Warning: No premium data for {truck_name}, skipping.")
 			continue
 
-		labels.append(truck_name)
+		labels.append(truck_title)
 		values_list.append(premium)
 		for value in premium:
 			rows.append({"truck_name": truck_name, "tco_premium_%": value})
@@ -1195,9 +1215,9 @@ def plot_tco_premium_all_drivecycles(datasets, plots_dir, param_suffix):
 
 	plt.figure(figsize=(10, 6))
 	plt.boxplot(values_list, tick_labels=labels, showmeans=True, meanprops=dict(marker='o', markerfacecolor='red', markeredgecolor='red'))
-	plt.title("EV TCO Premium vs Diesel (All Drivecycles)")
-	plt.ylabel("TCO Premium (%)")
-	plt.xticks(rotation=20, ha='right')
+	plt.ylabel("TCO Premium (%)", fontsize=24)
+	plt.xticks(rotation=20, ha='right', fontsize=20)
+	plt.yticks(fontsize=20)
 	plt.tight_layout()
 	output_path = plots_dir / f"tco_premium_all_drivecycles{param_suffix}.png"
 	plt.savefig(output_path, dpi=300, bbox_inches="tight")
@@ -1216,12 +1236,13 @@ def plot_distribution_comparisons_all_drivecycles(datasets, plots_dir, param_suf
 	truck_data = {}
 	for dataset in datasets:
 		truck_name = dataset["name"]
+		truck_title = dataset.get('truck_title', truck_name)
 		results_csv = plots_dir / f"{truck_name}_all_drivecycles_results{param_suffix}.csv"
 		if not results_csv.exists():
 			print(f"Warning: All-drivecycles results CSV not found for {truck_name}, skipping distribution plot.")
 			continue
 		results_df = pd.read_csv(results_csv)
-		truck_data[truck_name] = results_df
+		truck_data[truck_title] = results_df
 
 	if not truck_data:
 		print("Warning: No all-drivecycles results CSVs found for distribution plots.")
@@ -1243,11 +1264,21 @@ def plot_distribution_comparisons_all_drivecycles(datasets, plots_dir, param_suf
 			print(f"Warning: No data for {column}, skipping {output_name}.")
 			return
 
-		plt.figure(figsize=(10, 6))
+		plt.figure(figsize=(6, 6))
 		plt.boxplot(values_list, tick_labels=labels, showmeans=True, meanprops=dict(marker='o', markerfacecolor='red', markeredgecolor='red'))
-		plt.title(title)
-		plt.ylabel(ylabel)
-		plt.xticks(rotation=20, ha='right')
+		plt.ylabel(ylabel, fontsize=18)
+		plt.xticks(rotation=20, ha='right', fontsize=15)
+		plt.yticks(fontsize=15)
+
+		flat_values = np.concatenate(values_list)
+		if flat_values.size > 0:
+			min_val = float(np.nanmin(flat_values))
+			max_val = float(np.nanmax(flat_values))
+			if column not in _DISTRIBUTION_Y_LIMITS:
+				pad = (max_val - min_val) * 0.08 if max_val > min_val else max_val * 0.08
+				_DISTRIBUTION_Y_LIMITS[column] = (min_val - pad, max_val + pad)
+			plt.ylim(_DISTRIBUTION_Y_LIMITS[column])
+
 		plt.tight_layout()
 		output_path = plots_dir / output_name
 		plt.savefig(output_path, dpi=300, bbox_inches="tight")
@@ -1278,164 +1309,7 @@ def plot_distribution_comparisons_all_drivecycles(datasets, plots_dir, param_suf
 		output_name=f"emissions_distribution_all_drivecycles{param_suffix}.png",
 	)
 
-
-def main():
-	"""Main routine for generating drivecycle comparison plots with optional parameter optimization."""
-	
-	# Configuration flags - set these to control behavior
-	optimized = True  # Set to True to use optimized parameters
-	regenerate_model_results = False  # Set to True to regenerate model results (slow), False to use cached results (fast)
-	
-	# Constants
-	average_vmt = 100000
-	m_truck_max_lb = 82000
-	m_truck_max_kg = m_truck_max_lb * KG_PER_LB
-	
-	# Load optimized parameters if requested
-	optimized_params = load_optimized_parameters(use_optimized=optimized)
-	
-	# Determine output directory and suffix
-	param_suffix = "_optimized" if optimized else "_original"
-	plots_dir = Path("plots_messy")
-	plots_dir.mkdir(parents=True, exist_ok=True)
-
-	# Make plots_dir absolute to reference files from root
-	plots_dir = BASE_DIR / "plots_messy"
-	
-	model_results_dir = plots_dir / f"model_results{param_suffix}"
-	if regenerate_model_results:
-		model_results_dir.mkdir(parents=True, exist_ok=True)
-	
-	print(f"\nRunning analysis with {'optimized' if optimized else 'original'} parameters")
-	print(f"Regenerate model results: {regenerate_model_results}")
-	print(f"Output directory: {plots_dir.absolute()}")
-	print(f"Model results cache: {model_results_dir.absolute()}")
-	
-	datasets = [
-		{
-			"name": "saia2",
-			"truck_params": "saia",
-			"battery_col": "saia2",
-			"drivecycle_glob": "saia2_drivecycle_*_detailed.csv",
-			"summary_path": "messy_middle_results/saia2_drivecycle_data.csv",
-		},
-		{
-			"name": "4gen",
-			"truck_params": "4gen",
-			"battery_col": "4gen",
-			"drivecycle_glob": "4gen_drivecycle_*_detailed.csv",
-			"summary_path": "messy_middle_results/4gen_drivecycle_data.csv",
-		},
-		{
-			"name": "joyride",
-			"truck_params": "joyride",
-			"battery_col": "joyride",
-			"drivecycle_glob": "joyride_drivecycle_*_detailed.csv",
-			"summary_path": "messy_middle_results/joyride_drivecycle_data.csv",
-		},
-		{
-			"name": "nevoya_with_weight",
-			"truck_params": "nevoya",
-			"battery_col": "nevoya_with_weight",
-			"drivecycle_glob": "nevoya_with_weight_drivecycle_*_detailed.csv",
-			"summary_path": "messy_middle_results/nevoya_with_weight_drivecycle_data.csv",
-		},
-	]
-	# 	optimized_params=optimized_params,
-	# 	battery_caps=battery_caps,
-	# 	m_truck_max_kg=m_truck_max_kg,
-	# 	plots_dir=plots_dir,
-	# 	param_suffix=param_suffix,
-	# )
-
-	# # Read in saved results for each truck and calculate and plot distributions of the cost/mile and CO2e/mile for each driving event
-	# add_cost_emissions(
-	# 	datasets=datasets,
-	# 	plots_dir=plots_dir,
-	# 	param_suffix=param_suffix,
-	# 	average_vmt=average_vmt,
-	# 	optimized_params=optimized_params,
-	# 	battery_caps=battery_caps,
-	# 	m_truck_max_kg=m_truck_max_kg,
-	# )
-
-	# # Generate summary plots after updating cost/emissions columns
-	# for dataset in datasets:
-	# 	truck_name = dataset['name']
-	# 	results_csv = plots_dir / f"{truck_name}_results{param_suffix}.csv"
-	# 	if not results_csv.exists():
-	# 		continue
-	# 	results_df = pd.read_csv(results_csv)
-	# 	plot_truck_summary(truck_name, results_df.to_dict('records'), param_suffix, plots_dir)
-	
-	# # Generate distribution comparison plots across trucks
-	# plot_distribution_comparisons(datasets=datasets, plots_dir=plots_dir, param_suffix=param_suffix)
-	
-	# # Evaluate each truck model on all drivecycles
-	# evaluate_truck_on_all_drivecycles(
-	# 	datasets=datasets,
-	# 	optimized_params=optimized_params,
-	# 	battery_caps=battery_caps,
-	# 	m_truck_max_kg=m_truck_max_kg,
-	# 	results_dir=plots_dir,
-	# 	param_suffix=param_suffix,
-	# )
-
-	# # Add US-average cost/emissions to all-drivecycles results and compare distributions
-	# add_cost_emissions_all_drivecycles(
-	# 	datasets=datasets,
-	# 	plots_dir=plots_dir,
-	# 	param_suffix=param_suffix,
-	# 	average_vmt=average_vmt,
-	# 	optimized_params=optimized_params,
-	# 	battery_caps=battery_caps,
-	# 	m_truck_max_kg=m_truck_max_kg,
-	# )
-	# plot_distribution_comparisons_all_drivecycles(
-	# 	datasets=datasets,
-	# 	plots_dir=plots_dir,
-	# 	param_suffix=param_suffix,
-	# )
-
-	# # Evaluate diesel model on all drivecycles (using EV-optimized cd/cr), add diesel costs, and plot EV TCO premium
-	# evaluate_diesel_on_all_drivecycles(
-	# 	datasets=datasets,
-	# 	optimized_params=optimized_params,
-	# 	results_dir=plots_dir,
-	# 	param_suffix=param_suffix,
-	# )
-	# add_costs_diesel_all_drivecycles(
-	# 	datasets=datasets,
-	# 	plots_dir=plots_dir,
-	# 	param_suffix=param_suffix,
-	# 	average_vmt=average_vmt,
-	# )
-	# plot_tco_premium_all_drivecycles(
-	# 	datasets=datasets,
-	# 	plots_dir=plots_dir,
-	# 	param_suffix=param_suffix,
-	# )
-	
-	# Generate detailed cost and emissions breakdown
-	generate_cost_emissions_breakdown(
-		datasets=datasets,
-		plots_dir=plots_dir,
-		optimized_params=optimized_params,
-		param_suffix=param_suffix,
-		average_vmt=average_vmt,
-	)
-	
-	# Generate presentation-style step-by-step visuals
-	generate_presentation_visuals(
-		datasets=datasets,
-		plots_dir=plots_dir,
-		optimized_params=optimized_params,
-		param_suffix=param_suffix,
-		average_vmt=average_vmt,
-	)
-
-
-def generate_cost_emissions_breakdown(
+def generate_cost_breakdown(
 	datasets,
 	plots_dir,
 	optimized_params,
@@ -1443,28 +1317,28 @@ def generate_cost_emissions_breakdown(
 	average_vmt=100000,
 ):
 	"""
-	Generate a detailed side-by-side cost and emissions breakdown for EV vs Diesel trucks.
+	Generate a detailed cost breakdown for EV vs Diesel trucks.
 	
 	Uses pre-computed cost values from the result CSVs to avoid double-counting.
 	Breaks down costs into:
 	- Capital costs (base truck, battery/fuel tank)
 	- Operating costs (electricity/fuel, labor, maintenance, insurance, tolls, permits)
-	- Emissions
 	
 	Creates detailed tables and visualizations comparing all components.
 	"""
 	
-	breakdown_dir = plots_dir / f"cost_emissions_breakdown{param_suffix}"
+	breakdown_dir = plots_dir / f"cost_breakdown{param_suffix}"
 	breakdown_dir.mkdir(parents=True, exist_ok=True)
 	
 	print("\n" + "="*80)
-	print("COST & EMISSIONS BREAKDOWN: EV vs Diesel")
+	print("COST BREAKDOWN: EV vs Diesel")
 	print("="*80)
 	
 	breakdown_data = []
 	
 	for dataset in datasets:
 		truck_name = dataset["name"]
+		truck_title = dataset.get('truck_title', truck_name)
 		print(f"\n{'='*80}")
 		print(f"Analyzing: {truck_name}")
 		print(f"{'='*80}")
@@ -1565,6 +1439,7 @@ def generate_cost_emissions_breakdown(
 		battery_initial_cost = battery_unit_cost * battery_kwh
 		
 		# Calculate replacements based on degradation
+		# Use the actual VMT schedule (declining annual miles) for $/mi conversions
 		lifetime_miles = ev_params.VMT['VMT (miles)'].sum()
 		ev_fuel_kwh_per_mi_avg = ev_df['model_fuel'].mean() if 'model_fuel' in ev_df.columns else 1.85
 		
@@ -1944,7 +1819,7 @@ def generate_cost_emissions_breakdown(
 		ax6.text(x_pos[1], diesel_operating + 0.05, f'${diesel_operating:.2f}', ha='center', va='bottom', fontsize=9)
 		
 		# Add overall title
-		fig.suptitle(f'{truck_name} - Detailed Cost Breakdown Analysis', fontsize=16, fontweight='bold', y=0.995)
+		fig.suptitle(f'{truck_title} - Detailed Cost Breakdown Analysis', fontsize=16, fontweight='bold', y=0.995)
 		
 		plt.tight_layout()
 		plot_path = breakdown_dir / f"{truck_name}_cost_breakdown{param_suffix}.png"
@@ -1953,8 +1828,183 @@ def generate_cost_emissions_breakdown(
 		plt.close(fig)
 	
 	print("\n" + "="*80)
-	print("COST & EMISSIONS BREAKDOWN COMPLETE")
+	print("COST BREAKDOWN COMPLETE")
 	print("="*80)
+
+
+def generate_emissions_breakdown(
+	datasets,
+	plots_dir,
+	optimized_params,
+	param_suffix="_optimized",
+	average_vmt=100000,
+):
+	"""
+	Generate a detailed emissions breakdown for EV trucks.
+	
+	Breaks down emissions into:
+	- Manufacturing emissions
+	- Grid emissions
+	- Total emissions
+	
+	Creates detailed tables and visualizations.
+	"""
+	
+	breakdown_dir = plots_dir / f"emissions_breakdown{param_suffix}"
+	breakdown_dir.mkdir(parents=True, exist_ok=True)
+	
+	print("\n" + "="*80)
+	print("EMISSIONS BREAKDOWN: EV")
+	print("="*80)
+	
+	for dataset in datasets:
+		truck_name = dataset["name"]
+		truck_title = dataset.get('truck_title', truck_name)
+		print(f"\n{'='*80}")
+		print(f"Analyzing emissions for: {truck_name}")
+		print(f"{'='*80}")
+		
+		# Load EV results CSV
+		ev_results_path = plots_dir / f"{truck_name}_all_drivecycles_results{param_suffix}.csv"
+		if not ev_results_path.exists():
+			print(f"Warning: EV results not found at {ev_results_path}")
+			continue
+		
+		ev_df = pd.read_csv(ev_results_path)
+		
+		# Extract emissions data
+		ev_manufacturing_gco2 = ev_df['emissions_GHGs manufacturing (gCO2/mi)'].mean()
+		ev_grid_gco2 = ev_df['emissions_GHGs grid (gCO2/mi)'].mean()
+		ev_total_gco2 = ev_df['emissions_GHGs total (gCO2/mi)'].mean()
+		
+		# Create breakdown DataFrame
+		emissions_df = pd.DataFrame({
+			'Component': [
+				'Manufacturing Emissions',
+				'Grid Emissions',
+				'',
+				'TOTAL EMISSIONS',
+			],
+			'EV (gCO2/mi)': [
+				ev_manufacturing_gco2,
+				ev_grid_gco2,
+				'',
+				ev_total_gco2,
+			],
+		})
+		
+		# Save to CSV
+		csv_path = breakdown_dir / f"{truck_name}_emissions_breakdown.csv"
+		emissions_df.to_csv(csv_path, index=False)
+		print(f"\nSaved emissions breakdown: {csv_path}")
+		print(emissions_df.to_string())
+		
+		# Create visualization with two subplots
+		fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+		
+		# ========== SUBPLOT 1: Emissions Pie Chart ==========
+		labels = ['Manufacturing', 'Grid']
+		sizes = [ev_manufacturing_gco2, ev_grid_gco2]
+		colors = ['#ff7f0e', '#2ca02c']
+		
+		# Create pie chart with percentages and values
+		wedges, texts, autotexts = ax1.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%',
+									   startangle=90, textprops={'fontsize': 17})
+		for autotext in autotexts:
+			autotext.set_color('white')
+			autotext.set_fontweight('bold')
+			autotext.set_fontsize(18)
+		
+		# Add value labels
+		for i, (label, value) in enumerate(zip(labels, sizes)):
+			texts[i].set_fontsize(18)
+			texts[i].set_fontweight('bold')
+		
+		# Add title with total
+		ax1.set_title(f'{truck_title} - EV Emissions\nTotal: {ev_total_gco2:.1f} gCO₂e/mi', 
+					 fontweight='bold', fontsize=20)
+		
+		# Add legend with values
+		legend_labels = [f'{label}: {value:.1f} gCO₂e/mi' for label, value in zip(labels, sizes)]
+		ax1.legend(legend_labels, loc='upper left', bbox_to_anchor=(0, 0), fontsize=15)
+		
+		# ========== SUBPLOT 2: Grid Emissions Intensity Over Time ==========
+		# Get grid emissions projection
+		import emissions_tools
+		import data_collection_tools_messy
+		
+		# Load parameters for emissions tools
+		ev_params = data_collection_tools_messy.read_parameters(
+			truck_params=dataset["truck_params"],
+			vmt_params="daycab_vmt_vius_2021",
+			run="messy_middle",
+			truck_type="EV",
+		)
+		
+		# Get grid CI projection
+		present_grid_ci = 384  # g CO2e/kWh (USA average from data file)
+		grid_ci_year = 2022
+		truck_start_year = 2026
+		
+		VMT_grid_CI_df = emissions_tools.emission(ev_params).get_CI_grid_projection(
+			scenario='Present', 
+			grid_intensity_start=present_grid_ci, 
+			grid_intensity_start_year=grid_ci_year, 
+			start_year_truck_life=truck_start_year
+		)
+		
+		# Plot grid intensity over time (2026-2036, 10-year truck lifetime)
+		years = VMT_grid_CI_df['Date Year'].values
+		grid_ci_values = VMT_grid_CI_df['Grid CI (g CO2 / kWh)'].values
+		
+		# Extend to 2036 if not already included (linear extrapolation of last trend)
+		if years[-1] == 2035:
+			last_year_value = grid_ci_values[-1]
+			prev_year_value = grid_ci_values[-2]
+			trend = last_year_value - prev_year_value
+			year_2036_value = last_year_value + trend
+			years = np.append(years, 2036)
+			grid_ci_values = np.append(grid_ci_values, year_2036_value)
+		
+		ax2.plot(years, grid_ci_values, linewidth=2, color='#1f77b4', marker='o', markersize=4)
+		
+		# Highlight present day value (2026) with red point only (no annotation box)
+		present_idx = 0  # First year is 2026 (present day)
+		present_value = grid_ci_values[present_idx]
+		ax2.scatter([truck_start_year], [present_value], color='#d62728', s=200, zorder=5, 
+				   edgecolors='black', linewidths=2)
+		
+		ax2.set_xlabel('Year', fontweight='bold', fontsize=17)
+		ax2.set_ylabel('Grid Emissions Intensity (gCO₂e/kWh)', fontweight='bold', fontsize=17)
+		ax2.set_title(f'US Grid Intensity (10-year truck lifetime)', fontweight='bold', fontsize=20)
+		ax2.tick_params(axis='both', labelsize=14)
+		ax2.grid(True, alpha=0.3)
+		ax2.set_xlim(years[0] - 0.5, years[-1] + 0.5)
+		
+		plt.tight_layout()
+		plot_path = breakdown_dir / f"{truck_name}_emissions_breakdown{param_suffix}.png"
+		plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+		print(f"Saved emissions breakdown plot: {plot_path}")
+		plt.close(fig)
+	
+	print("\n" + "="*80)
+	print("EMISSIONS BREAKDOWN COMPLETE")
+	print("="*80)
+
+
+def generate_cost_emissions_breakdown(
+	datasets,
+	plots_dir,
+	optimized_params,
+	param_suffix="_optimized",
+	average_vmt=100000,
+):
+	"""
+	Generate both cost and emissions breakdowns.
+	Convenience function that calls both generate_cost_breakdown and generate_emissions_breakdown.
+	"""
+	generate_cost_breakdown(datasets, plots_dir, optimized_params, param_suffix, average_vmt)
+	generate_emissions_breakdown(datasets, plots_dir, optimized_params, param_suffix, average_vmt)
 
 
 def generate_presentation_visuals(
@@ -1990,6 +2040,7 @@ def generate_presentation_visuals(
 	
 	for dataset in datasets:
 		truck_name = dataset["name"]
+		truck_title = dataset.get('truck_title', truck_name)
 		print(f"\nGenerating presentation visuals for: {truck_name}")
 		
 		# Load the breakdown CSV
@@ -2179,7 +2230,7 @@ def generate_presentation_visuals(
 		ax4.set_ylabel('Cost ($/mi)', fontweight='bold', fontsize=24)
 		ax4.set_xticks(x_pos_other)
 		component_labels = [c.strip() for c in other_components]
-		ax4.set_xticklabels(component_labels, rotation=45, ha='right', fontsize=16)
+		ax4.set_xticklabels(component_labels, rotation=20, ha='right', fontsize=16)
 		ax4.tick_params(axis='y', labelsize=18)
 		ax4.grid(True, alpha=0.3, axis='y')
 		
@@ -2251,5 +2302,257 @@ def generate_presentation_visuals(
 	print(f"\n✓ Presentation visuals saved to: {presentation_dir.absolute()}")
 
 
+def generate_emissions_presentation_visuals(
+	datasets,
+	plots_dir,
+	optimized_params,
+	param_suffix="_optimized",
+	average_vmt=100000,
+):
+	"""
+	Generate presentation-ready emissions breakdown visualizations for EV trucks.
+	Creates clean, legend-free plots suitable for presentations showing:
+	1. Total emissions only
+	2. Manufacturing vs Grid emissions breakdown (stacked)
+	"""
+	
+	presentation_dir = plots_dir / f"presentation_emissions{param_suffix}"
+	presentation_dir.mkdir(parents=True, exist_ok=True)
+	
+	print("\n" + "="*80)
+	print("GENERATING EMISSIONS PRESENTATION VISUALS")
+	print("="*80)
+	
+	for dataset in datasets:
+		truck_name = dataset["name"]
+		truck_title = dataset.get('truck_title', truck_name)
+		print(f"\nGenerating emissions visuals for: {truck_name}")
+		
+		# Load EV results CSV
+		ev_results_path = plots_dir / f"{truck_name}_all_drivecycles_results{param_suffix}.csv"
+		if not ev_results_path.exists():
+			print(f"  Warning: EV results not found at {ev_results_path}")
+			continue
+		
+		ev_df = pd.read_csv(ev_results_path)
+		
+		# Extract emissions data (convert from gCO2/mi to kgCO2/mi for readability)
+		ev_manufacturing = ev_df['emissions_GHGs manufacturing (gCO2/mi)'].mean() / 1000  # to kg
+		ev_grid = ev_df['emissions_GHGs grid (gCO2/mi)'].mean() / 1000  # to kg
+		ev_total = ev_df['emissions_GHGs total (gCO2/mi)'].mean() / 1000  # to kg
+		
+		# Setup for single bar
+		x_pos = np.array([0])
+		width = 0.6
+		
+		# Calculate max y for consistent scaling
+		max_y = ev_total * 1.15
+		
+		# ========== PLOT 1: Total emissions only ==========
+		fig1, ax1 = plt.subplots(figsize=(6, 6))
+		
+		ax1.bar(x_pos[0], ev_total, width, color='#d62728', alpha=0.8)
+		
+		ax1.set_ylabel('Emissions (kg CO₂/mi)', fontweight='bold', fontsize=24)
+		ax1.set_xticks(x_pos)
+		ax1.set_xticklabels(['EV'], fontsize=21)
+		ax1.tick_params(axis='y', labelsize=18)
+		ax1.set_ylim(0, max_y)
+		ax1.grid(True, alpha=0.3, axis='y')
+		
+		plt.tight_layout()
+		output_path = presentation_dir / f"{truck_name}_emissions_01_total{param_suffix}.png"
+		fig1.savefig(output_path, dpi=300, bbox_inches="tight")
+		plt.close(fig1)
+		
+		# ========== PLOT 2: Manufacturing + Grid breakdown (stacked) ==========
+		fig2, ax2 = plt.subplots(figsize=(6, 6))
+		
+		ax2.bar(x_pos[0], ev_manufacturing, width, color='#ff7f0e', alpha=0.8)
+		ax2.bar(x_pos[0], ev_grid, width, bottom=ev_manufacturing, color='#2ca02c', alpha=0.8)
+		
+		ax2.set_ylabel('Emissions (kg CO₂/mi)', fontweight='bold', fontsize=24)
+		ax2.set_xticks(x_pos)
+		ax2.set_xticklabels(['EV'], fontsize=21)
+		ax2.tick_params(axis='y', labelsize=18)
+		ax2.set_ylim(0, max_y)
+		ax2.grid(True, alpha=0.3, axis='y')
+		
+		plt.tight_layout()
+		output_path = presentation_dir / f"{truck_name}_emissions_02_breakdown{param_suffix}.png"
+		fig2.savefig(output_path, dpi=300, bbox_inches="tight")
+		plt.close(fig2)
+		
+		print(f"  ✓ Generated 2 emissions visuals for {truck_name}")
+	
+	print(f"\n✓ Emissions visuals saved to: {presentation_dir.absolute()}")
+
+
+def main():
+	"""Main routine for generating drivecycle comparison plots with optional parameter optimization."""
+	
+	# Configuration flags - set these to control behavior
+	optimized = True  # Set to True to use optimized parameters
+	regenerate_model_results = False  # Set to True to regenerate model results (slow), False to use cached results (fast)
+	
+	# Constants
+	average_vmt = 100000
+	m_truck_max_lb = 82000
+	m_truck_max_kg = m_truck_max_lb * KG_PER_LB
+	
+	# Load optimized parameters if requested
+	optimized_params = load_optimized_parameters(use_optimized=optimized)
+	
+	# Determine output directory and suffix
+	param_suffix = "_optimized" if optimized else "_original"
+	plots_dir = Path("plots_messy")
+	plots_dir.mkdir(parents=True, exist_ok=True)
+
+	# Make plots_dir absolute to reference files from root
+	plots_dir = BASE_DIR / "plots_messy"
+	
+	model_results_dir = plots_dir / f"model_results{param_suffix}"
+	if regenerate_model_results:
+		model_results_dir.mkdir(parents=True, exist_ok=True)
+	
+	print(f"\nRunning analysis with {'optimized' if optimized else 'original'} parameters")
+	print(f"Regenerate model results: {regenerate_model_results}")
+	print(f"Output directory: {plots_dir.absolute()}")
+	print(f"Model results cache: {model_results_dir.absolute()}")
+	
+	datasets = [
+		{
+			"name": "saia2",
+			"truck_params": "saia",
+			"battery_col": "saia1",
+			"truck_title": "SAIA",
+			"drivecycle_glob": "saia2_drivecycle_*_detailed.csv",
+			"summary_path": "messy_middle_results/saia2_drivecycle_data.csv",
+		},
+		{
+			"name": "4gen",
+			"truck_params": "4gen",
+			"battery_col": "4gen",
+			"truck_title": "4Gen",
+			"drivecycle_glob": "4gen_drivecycle_*_detailed.csv",
+			"summary_path": "messy_middle_results/4gen_drivecycle_data.csv",
+		},
+		{
+			"name": "joyride",
+			"truck_params": "joyride",
+			"battery_col": "joyride",
+			"truck_title": "Joyride",
+			"drivecycle_glob": "joyride_drivecycle_*_detailed.csv",
+			"summary_path": "messy_middle_results/joyride_drivecycle_data.csv",
+		},
+		{
+			"name": "nevoya_with_weight",
+			"truck_params": "nevoya",
+			"truck_title": "Nevoya",
+			"battery_col": "nevoya_with_weight",
+			"drivecycle_glob": "nevoya_with_weight_drivecycle_*_detailed.csv",
+			"summary_path": "messy_middle_results/nevoya_with_weight_drivecycle_data.csv",
+		},
+	]
+
+	# process_drivecycles_and_save_results(
+	# 	datasets=datasets,
+	# 	regenerate_model_results=regenerate_model_results,
+	# 	model_results_dir=model_results_dir,
+	# 	optimized_params=optimized_params,
+	# 	battery_caps=battery_caps,
+	# 	m_truck_max_kg=m_truck_max_kg,
+	# 	plots_dir=plots_dir,
+	# 	param_suffix=param_suffix,
+	# )
+
+	# # Read in saved results for each truck and calculate and plot distributions of the cost/mile and CO2e/mile for each driving event
+	# add_cost_emissions(
+	# 	datasets=datasets,
+	# 	plots_dir=plots_dir,
+	# 	param_suffix=param_suffix,
+	# 	average_vmt=average_vmt,
+	# 	optimized_params=optimized_params,
+	# 	battery_caps=battery_caps,
+	# 	m_truck_max_kg=m_truck_max_kg,
+	# )
+
+	# # Generate summary plots after updating cost/emissions columns
+	# for dataset in datasets:
+	# 	truck_name = dataset['name']
+	# 	truck_title = dataset.get('truck_title', truck_name)
+	# 	results_csv = plots_dir / f"{truck_name}_results{param_suffix}.csv"
+	# 	if not results_csv.exists():
+	# 		continue
+	# 	results_df = pd.read_csv(results_csv)
+	# 	plot_truck_summary(truck_name, truck_title, results_df.to_dict('records'), param_suffix, plots_dir)
+	
+	# # Generate distribution comparison plots across trucks
+	# plot_distribution_comparisons(datasets=datasets, plots_dir=plots_dir, param_suffix=param_suffix)
+	
+	# # Evaluate each truck model on all drivecycles
+	# evaluate_truck_on_all_drivecycles(
+	# 	datasets=datasets,
+	# 	optimized_params=optimized_params,
+	# 	battery_caps=battery_caps,
+	# 	m_truck_max_kg=m_truck_max_kg,
+	# 	results_dir=plots_dir,
+	# 	param_suffix=param_suffix,
+	# )
+
+	# # Add US-average cost/emissions to all-drivecycles results and compare distributions
+	# add_cost_emissions_all_drivecycles(
+	# 	datasets=datasets,
+	# 	plots_dir=plots_dir,
+	# 	param_suffix=param_suffix,
+	# 	average_vmt=average_vmt,
+	# 	optimized_params=optimized_params,
+	# 	battery_caps=battery_caps,
+	# 	m_truck_max_kg=m_truck_max_kg,
+	# )
+	# plot_distribution_comparisons_all_drivecycles(
+	# 	datasets=datasets,
+	# 	plots_dir=plots_dir,
+	# 	param_suffix=param_suffix,
+	# )
+
+	# Evaluate diesel model on all drivecycles (using EV-optimized cd/cr), add diesel costs, and plot EV TCO premium
+	evaluate_diesel_on_all_drivecycles(
+		datasets=datasets,
+		optimized_params=optimized_params,
+		results_dir=plots_dir,
+		param_suffix=param_suffix,
+	)
+	add_costs_diesel_all_drivecycles(
+		datasets=datasets,
+		plots_dir=plots_dir,
+		param_suffix=param_suffix,
+		average_vmt=average_vmt,
+	)
+	plot_tco_premium_all_drivecycles(
+		datasets=datasets,
+		plots_dir=plots_dir,
+		param_suffix=param_suffix,
+	)
+	
+	# # Generate detailed cost and emissions breakdown
+	# generate_cost_emissions_breakdown(
+	# 	datasets=datasets,
+	# 	plots_dir=plots_dir,
+	# 	optimized_params=optimized_params,
+	# 	param_suffix=param_suffix,
+	# 	average_vmt=average_vmt,
+	# )
+	
+	# # Generate presentation-style step-by-step visuals
+	# generate_presentation_visuals(
+	# 	datasets=datasets,
+	# 	plots_dir=plots_dir,
+	# 	optimized_params=optimized_params,
+	# 	param_suffix=param_suffix,
+	# 	average_vmt=average_vmt,
+	# )
+
+
 if __name__ == "__main__":
-	main()
+	main() 

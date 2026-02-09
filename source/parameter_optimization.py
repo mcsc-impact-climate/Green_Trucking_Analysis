@@ -31,7 +31,7 @@ datasets = [
     {
         "name": "saia2",
         "truck_params": "saia",
-        "battery_col": "saia2",
+        "battery_col": "saia1",
         "drivecycle_glob": "saia2_drivecycle_*_detailed.csv",
         "summary_path": "messy_middle_results/saia2_drivecycle_data.csv",
     },
