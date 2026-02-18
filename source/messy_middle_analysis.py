@@ -14,8 +14,6 @@ import argparse
 import pickle
 import truck_model_tools_messy as truck_model_tools_messy
 import truck_model_tools_diesel_messy as truck_model_tools_diesel_messy
-import retired.costing_tools_orig as costing_tools
-import retired.emissions_tools_orig as emissions_tools
 import data_collection_tools_messy
 from costing_and_emissions_tools_messy import get_payload_distribution, get_payload_penalty, evaluate_emissions, evaluate_costs, evaluate_costs_diesel, calculate_replacements
 
